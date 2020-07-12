@@ -16,7 +16,7 @@ ACTIONS_MEANING = {
 STATES = ['0']
 # 0: prev 50 minutes delta price
 
-REWARDS = ['TP']
+REWARDS = ['TP', 'running_SR', 'log_return']
 FEATURES = []
 
 CHECKED_SECURITIES = ['IF9999.CCFX']
@@ -33,14 +33,14 @@ class FinancialEnv(gym.Env):
         self.start_date = datetime.datetime.strptime('2010-05-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2020-06-28', '%Y-%m-%d')
 
-        self._set_boundaries()
-        self.observation_space = Box(low=self.low, high=self.high, dtype=np.float32)
-        self.action_space = Discrete(3)
-
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
         assert reward in REWARDS, 'Invalid Reward Type, Should be one of {}'.format(REWARDS)
         self.reward_type = reward
+        self._set_boundaries()
+        self.observation_space = Box(low=self.low, high=self.high, dtype=np.float32)
+        self.action_space = Discrete(3)
+
         self.log_return = log_return
         self.tax_multi = tax_multiple
 
@@ -48,6 +48,7 @@ class FinancialEnv(gym.Env):
         self._get_tax_rate()
 
         self.cur_pos = 0
+        self.trading_ticks = 0
 
         self.capital_base = 100000
         self.cash = self.capital_base
@@ -55,6 +56,10 @@ class FinancialEnv(gym.Env):
         self.shares = 0
         self.assets = self.capital_base
         self.cur_return = 0.
+
+        # for SR
+        self.A_n = 0.
+        self.B_n = 0.
 
     def reset(self, by_day=True):
         """
@@ -65,10 +70,15 @@ class FinancialEnv(gym.Env):
             self.cur_pos = 0
         else:
             self.jmp_to_next_day()
+        self.trading_ticks = 0
         self.cash = self.capital_base
         self.position = 0
         self.shares = 0
         self.assets = self.capital_base
+
+        # for SR
+        self.A_n = 0.
+        self.B_n = 0.
         return self.get_ob()
 
     def step(self, action):
@@ -76,13 +86,15 @@ class FinancialEnv(gym.Env):
         if isinstance(self.action_space, Discrete): action = action - 1
         done = 1 if self.cur_pos >= (len(self.indices) - 1) else 0
 
+        self.trading_ticks += 1
+
         # 仓位未变动，只需要刷新资产和收益
         if action == self.position:
             ob = self.get_ob()
             reward = self.calc_reward()
             self.update_assets()
             # self.log_info()
-            print('reward: {:.2f} done: {}'.format(reward, done))
+            # print('reward: {:.2f} done: {}'.format(reward, done))
             self.cur_pos += 1
             return ob, reward, done, {}
 
@@ -133,10 +145,30 @@ class FinancialEnv(gym.Env):
         if self.reward_type == 'TP':
             tp_reward = self.cash + self.shares * self.prices[self.cur_pos] - self.assets
             return tp_reward
+        elif self.reward_type == 'log_return':
+            cur_assets = self.cash + self.shares * self.prices[self.cur_pos]
+            origin_return = (cur_assets - self.assets) / self.assets
+            log_return = np.log(1 + origin_return)
+            return log_return
+        elif self.reward_type == 'running_SR':
+            n = self.trading_ticks
+            r_n = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets
+            self.A_n = (1 / n) * r_n + (n - 1) / n * self.A_n
+            self.B_n = (1 / n) * np.square(r_n) + (n - 1) / n * self.B_n
+            if self.trading_ticks == 1:
+                sr_n = 0
+            else:
+                sr_n = self.A_n / np.sqrt(self.B_n - np.square(self.A_n))
+            return sr_n
+        else:
+            raise NotImplementedError
 
     def _set_boundaries(self):
-        self.high = np.array([5] * 50)
-        self.low = np.array([-5] * 50)
+        if self.state_type == '0':
+            self.high = np.array([5] * 50)
+            self.low = np.array([-5] * 50)
+        else:
+            raise NotImplementedError
 
     def jmp_to_next_day(self):
         """
@@ -211,10 +243,19 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(1, state='0', reward='TP')
-    for i in range(300):
+    env = FinancialEnv(1, state='0', reward='running_SR')
+    rwd = 0
+    steps = 300
+    while True:
+        if steps == 0:
+            break
         import random
         ac = random.randint(0, 2)
-        ob, r, _, _ = env.step(ac)
-        # print(ob)
+        ob, r, done, _ = env.step(ac)
+        print(env.assets, env.cur_pos, r)
+        rwd += r
+        if done:
+            print(env.assets, env.cur_pos, rwd)
+            break
+        steps -= 1
         # print(r)
