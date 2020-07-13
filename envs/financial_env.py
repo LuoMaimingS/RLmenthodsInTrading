@@ -5,7 +5,6 @@ import numpy as np
 import datetime
 import os
 import pandas as pd
-import tqdm
 
 ACTIONS_MEANING = {
     0: "SHORT",
@@ -13,7 +12,7 @@ ACTIONS_MEANING = {
     2: "LONG",
 }
 
-STATES = ['0']
+STATES = ['0', '1']
 # 0: prev 50 minutes delta price
 
 REWARDS = ['TP', 'running_SR', 'log_return']
@@ -81,10 +80,19 @@ class FinancialEnv(gym.Env):
         self.B_n = 0.
         return self.get_ob()
 
-    def step(self, action):
+    def step(self, action, by_day=True):
+        """
+        :param action: 当前动作
+        :param by_day: 若为True，则每日最后一个时刻done为True，且不再前进
+        :return:
+        """
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         if isinstance(self.action_space, Discrete): action = action - 1
-        done = 1 if self.cur_pos >= (len(self.indices) - 1) else 0
+        done = 0
+        if self.cur_pos >= (len(self.indices) - 2):
+            done = 1
+        elif by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
+            done = 1
 
         self.trading_ticks += 1
 
@@ -95,8 +103,8 @@ class FinancialEnv(gym.Env):
             self.update_assets()
             # self.log_info()
             # print('reward: {:.2f} done: {}'.format(reward, done))
-            self.cur_pos += 1
-            return ob, reward, done, {}
+            self.cur_pos = self.cur_pos + 1 - done
+            return ob, reward, done, {'return': self.cur_return}
 
         # 仓位变化，重计算损益
         cur_price = self.prices[self.cur_pos]
@@ -109,14 +117,14 @@ class FinancialEnv(gym.Env):
             # 卖出
             self.cash = self.cash + abs(new_shares - self.shares) * cur_price * (1 - self.sell_rate * self.tax_multi)
         self.shares = new_shares
-        self.position = action
         ob = self.get_ob()
+        self.position = action
         reward = self.calc_reward()
         self.update_assets()
 
         # self.log_info()
-        self.cur_pos += 1
-        return ob, reward, done, {}
+        self.cur_pos = self.cur_pos + 1 - done
+        return ob, reward, done, {'return': self.cur_return}
 
     def seed(self, seed=None):
         _, seed = seeding.np_random(seed)
@@ -129,7 +137,7 @@ class FinancialEnv(gym.Env):
         if self.state_type == '0':
             # 前50分钟价差
             head_idx = max(0, self.cur_pos - 50)
-            prev_51_prices = self.prices[head_idx:self.cur_pos + 1]
+            prev_51_prices = np.log(self.prices[head_idx:self.cur_pos + 1])
             delta_50min_prices = np.diff(prev_51_prices)
             if delta_50min_prices.shape[0] != 50:
                 delta_50min_prices = np.concatenate(
@@ -155,7 +163,8 @@ class FinancialEnv(gym.Env):
             r_n = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets
             self.A_n = (1 / n) * r_n + (n - 1) / n * self.A_n
             self.B_n = (1 / n) * np.square(r_n) + (n - 1) / n * self.B_n
-            if self.trading_ticks == 1:
+            # print(self.A_n, self.B_n, self.trading_ticks)
+            if self.trading_ticks == 1 or self.A_n == 0:
                 sr_n = 0
             else:
                 sr_n = self.A_n / np.sqrt(self.B_n - np.square(self.A_n))
@@ -176,7 +185,7 @@ class FinancialEnv(gym.Env):
         """
         prev_idx = self.cur_pos
         while 1:
-            if self.cur_pos >= len(self.indices):
+            if self.cur_pos >= len(self.indices) - 1:
                 self.cur_pos = 0
                 break
             self.cur_pos += 1
@@ -245,17 +254,14 @@ class FinancialEnv(gym.Env):
 if __name__ == '__main__':
     env = FinancialEnv(1, state='0', reward='running_SR')
     rwd = 0
-    steps = 300
     while True:
-        if steps == 0:
-            break
         import random
-        ac = random.randint(0, 2)
+        ac = 2
         ob, r, done, _ = env.step(ac)
-        print(env.assets, env.cur_pos, r)
+        # print(env.assets, env.cur_pos, r)
         rwd += r
         if done:
             print(env.assets, env.cur_pos, rwd)
-            break
-        steps -= 1
+            rwd = 0
+            env.reset()
         # print(r)
