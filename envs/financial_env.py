@@ -12,11 +12,13 @@ ACTIONS_MEANING = {
     2: "LONG",
 }
 
-STATES = ['0', '1']
+STATES = ['0', '1', '2', '3']
 # 0: prev 50 minutes delta price
+# 1: 14 technical indicators
+# 2: 14 technical indicators with position
+# 3: prev_10 minutes delta price, 14 technical indicators with position
 
 REWARDS = ['TP', 'running_SR', 'log_return']
-FEATURES = []
 
 CHECKED_SECURITIES = ['IF9999.CCFX']
 
@@ -26,7 +28,9 @@ class FinancialEnv(gym.Env):
                  state=None,
                  reward=None,
                  log_return=False,
-                 tax_multiple=1):
+                 tax_multiple=1,
+                 short_term=None,
+                 long_term=None):
         # config 未设置完成，手动赋值
         self.security = 'IF9999.CCFX'
         self.start_date = datetime.datetime.strptime('2010-05-01', '%Y-%m-%d')
@@ -60,6 +64,14 @@ class FinancialEnv(gym.Env):
         self.A_n = 0.
         self.B_n = 0.
 
+        # for indicators
+        self.cur_obv = 0
+        self.last_obv = 0
+        self.past_30_day_close = []
+        self.past_30_day_obv = []             # On-Balance Volume
+        self.s = [1, 2, 3] if short_term is None else short_term
+        self.l = [9, 12] if long_term is None else long_term
+
     def reset(self, by_day=True):
         """
         :param by_day:   若为True，重置时跳到下一天的开始，否则回到第一天
@@ -69,6 +81,13 @@ class FinancialEnv(gym.Env):
             self.cur_pos = 0
         else:
             self.jmp_to_next_day()
+
+        # for indicators
+        if self.cur_pos == 0:
+            self.last_obv = 0
+            self.past_30_day_obv = []
+            self.past_30_day_close = []
+
         self.trading_ticks = 0
         self.cash = self.capital_base
         self.position = 0
@@ -78,10 +97,15 @@ class FinancialEnv(gym.Env):
         # for SR
         self.A_n = 0.
         self.B_n = 0.
+
+        # for indicators
+        # Init OBV.
+        self.cur_obv += self.bar_vol[self.cur_pos] * np.sign(self.prices[self.cur_pos] - self.bar_opens[self.cur_pos])
         return self.get_ob()
 
     def step(self, action, by_day=True):
         """
+        根据动作，在t时刻做出行动，得到在t时刻的reward，并返回做完该动作后（即t+1时刻）的state
         :param action: 当前动作
         :param by_day: 若为True，则每日最后一个时刻done为True，且不再前进
         :return:
@@ -89,21 +113,44 @@ class FinancialEnv(gym.Env):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         if isinstance(self.action_space, Discrete): action = action - 1
         done = 0
+        self.trading_ticks += 1
+
+        # Update Past 30 Day Info.
+        if self.cur_pos <= 2:
+            self.last_obv = 0
+            self.past_30_day_obv = []
+            self.past_30_day_close = []
+        elif self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
+            # 进入新的交易日，将昨日的相关日级指标更新，且保持追踪30天历史
+            if len(self.past_30_day_close) == 30:
+                del self.past_30_day_close[0]
+                del self.past_30_day_obv[0]
+                self.past_30_day_close.append(self.prices[self.cur_pos - 1])
+                self.past_30_day_obv.append(self.last_obv)
+            else:
+                assert len(self.past_30_day_close) < 30
+                self.past_30_day_close.append(self.prices[self.cur_pos - 1])
+                self.past_30_day_obv.append(self.last_obv)
+
+        # Done check. 当前是否为该日的结束
         if self.cur_pos >= (len(self.indices) - 2):
             done = 1
         elif by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
             done = 1
 
-        self.trading_ticks += 1
+        if done:
+            self.last_obv = self.cur_obv
+        else:
+            self.cur_obv += self.bar_vol[self.cur_pos + 1] * \
+                            np.sign(self.prices[self.cur_pos + 1] - self.bar_opens[self.cur_pos + 1])
 
         # 仓位未变动，只需要刷新资产和收益
         if action == self.position:
-            ob = self.get_ob()
             reward = self.calc_reward()
             self.update_assets()
             # self.log_info()
-            # print('reward: {:.2f} done: {}'.format(reward, done))
             self.cur_pos = self.cur_pos + 1 - done
+            ob = self.get_ob()
             return ob, reward, done, {'return': self.cur_return}
 
         # 仓位变化，重计算损益
@@ -117,13 +164,13 @@ class FinancialEnv(gym.Env):
             # 卖出
             self.cash = self.cash + abs(new_shares - self.shares) * cur_price * (1 - self.sell_rate * self.tax_multi)
         self.shares = new_shares
-        ob = self.get_ob()
         self.position = action
         reward = self.calc_reward()
         self.update_assets()
 
         # self.log_info()
         self.cur_pos = self.cur_pos + 1 - done
+        ob = self.get_ob()
         return ob, reward, done, {'return': self.cur_return}
 
     def seed(self, seed=None):
@@ -143,6 +190,73 @@ class FinancialEnv(gym.Env):
                 delta_50min_prices = np.concatenate(
                     (np.zeros((50 - delta_50min_prices.shape[0],)), delta_50min_prices), axis=0)
             return delta_50min_prices
+        elif self.state_type == '1' or self.state_type == '2' or self.state_type == '3':
+            """
+            14 Technical Indicators Analysed In -- C. J. Neely, D. E. Rapach, J. Tu, and G. Zhou,
+            “Forecasting the equity risk premium: The role of technical indicators,”
+            Manage. Sci., vol. 60, no. 7, pp. 1772–1791, 2014.
+            """
+            signals = []
+
+            # MOVING AVERAGE 长短期信号，对应的短期指标超越对应的长期指标时，出现1
+            ma_sl = []
+            sl_indices = self.s + self.l
+            for sl in sl_indices:
+                sigma = self.prices[self.cur_pos]
+                for k in range(sl - 1):
+                    if len(self.past_30_day_close) >= (k + 1):
+                        sigma += self.past_30_day_close[-k - 1]
+                    else:
+                        sigma += self.prices[self.cur_pos]
+                ma_sl.append(sigma / sl)
+            ma_s = ma_sl[:len(self.s)]
+            ma_l = ma_sl[len(self.s):]
+            ma_signals = []
+            for ma_s_val in ma_s:
+                for ma_l_val in ma_l:
+                    ma_signals.append(int(ma_s_val > ma_l_val))
+            signals += ma_signals
+
+            # Momentum 信号
+            momentum = []
+            for l in self.l:
+                if l == 0 or l > len(self.past_30_day_close):
+                    momentum.append(0)
+                else:
+                    momentum.append(int(self.prices[self.cur_pos] > self.past_30_day_close[-l]))
+            signals += momentum
+
+            # On-Balance Volume 长短期信号
+            ma_obv_sl = []
+            sl_indices = self.s + self.l
+            for sl in sl_indices:
+                sigma = self.cur_obv
+                for k in range(sl - 1):
+                    if len(self.past_30_day_obv) >= (k + 1):
+                        sigma += self.past_30_day_obv[-k - 1]
+                    else:
+                        sigma += self.cur_obv
+                ma_obv_sl.append(sigma / sl)
+            ma_obv_s = ma_obv_sl[:len(self.s)]
+            ma_obv_l = ma_obv_sl[len(self.s):]
+            ma_obv_signals = []
+            for ma_obv_s_val in ma_obv_s:
+                for ma_obv_l_val in ma_obv_l:
+                    ma_obv_signals.append(int(ma_obv_s_val > ma_obv_l_val))
+            signals += ma_obv_signals
+            if self.state_type == '1':
+                return np.array(signals)
+            elif self.state_type == '2':
+                return np.array(signals + [self.position])
+            elif self.state_type == '3':
+                # 前50分钟价差
+                head_idx = max(0, self.cur_pos - 10)
+                prev_11_prices = np.log(self.prices[head_idx:self.cur_pos + 1])
+                delta_10min_prices = np.diff(prev_11_prices)
+                if delta_10min_prices.shape[0] != 10:
+                    delta_10min_prices = np.concatenate(
+                        (np.zeros((10 - delta_10min_prices.shape[0],)), delta_10min_prices), axis=0)
+                return np.array(list(delta_10min_prices) + signals + [self.position])
         else:
             raise NotImplementedError
 
@@ -167,7 +281,8 @@ class FinancialEnv(gym.Env):
             if self.trading_ticks == 1 or self.A_n == 0:
                 sr_n = 0
             else:
-                sr_n = self.A_n / np.sqrt(self.B_n - np.square(self.A_n))
+                k_n = np.sqrt(n / (n - 1))
+                sr_n = self.A_n / (k_n * np.sqrt(self.B_n - np.square(self.A_n)))
             return sr_n
         else:
             raise NotImplementedError
@@ -176,6 +291,15 @@ class FinancialEnv(gym.Env):
         if self.state_type == '0':
             self.high = np.array([5] * 50)
             self.low = np.array([-5] * 50)
+        elif self.state_type == '1':
+            self.high = np.array([1] * 14)
+            self.low = np.array([0] * 14)
+        elif self.state_type == '2':
+            self.high = np.array([1] * 14 + [1])
+            self.low = np.array([0] * 14 + [-1])
+        elif self.state_type == '3':
+            self.high = np.array([5] * 10 + [1] * 14 + [1])
+            self.low = np.array([-5] * 10 + [0] * 14 + [-1])
         else:
             raise NotImplementedError
 
@@ -185,7 +309,7 @@ class FinancialEnv(gym.Env):
         """
         prev_idx = self.cur_pos
         while 1:
-            if self.cur_pos >= len(self.indices) - 1:
+            if self.cur_pos >= len(self.indices) - 1 or self.cur_pos == 0:
                 self.cur_pos = 0
                 break
             self.cur_pos += 1
@@ -210,7 +334,10 @@ class FinancialEnv(gym.Env):
         raw_data = pd.read_hdf(load_file)
         self.data = raw_data.loc[self.start_date:self.end_date]
 
+        self.bar_opens = list(raw_data.loc[self.start_date:self.end_date]['open'])
+        self.bar_vol = list(raw_data.loc[self.start_date:self.end_date]['volume'])
         self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
+
         self.indices = self.data.index.tolist()
         self.total_minutes = len(self.indices)
         self.total_days = int(self.total_minutes / 240)
@@ -252,12 +379,13 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(1, state='0', reward='running_SR')
+    env = FinancialEnv(1, state='3', reward='running_SR')
+    env.reset()
     rwd = 0
     while True:
         import random
-        ac = 2
-        ob, r, done, _ = env.step(ac)
+        ac = np.random.randint(0, 2)
+        ob, r, done, info = env.step(ac)
         # print(env.assets, env.cur_pos, r)
         rwd += r
         if done:
