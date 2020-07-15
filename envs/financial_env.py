@@ -35,8 +35,8 @@ class FinancialEnv(gym.Env):
                  long_term=None):
         # config 未设置完成，手动赋值
         self.security = 'IF9999.CCFX'
-        self.start_date = datetime.datetime.strptime('2010-05-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2020-06-28', '%Y-%m-%d')
+        self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
 
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
@@ -355,6 +355,7 @@ class FinancialEnv(gym.Env):
             if self.indices[prev_idx].date() != self.indices[self.cur_pos].date():
                 break
             prev_idx += 1
+        self.get_ob()
 
     def update_assets(self):
         self.assets = self.cash + self.shares * self.prices[self.cur_pos]
