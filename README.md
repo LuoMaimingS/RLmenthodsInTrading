@@ -10,6 +10,8 @@ ob, r, done, info = env.step(ac, by_day=False)
 
 回测时将by_day设为False，即会一直连续交易，与一般回测流程保持一致。
 
+消除了一些特殊情形下，浮点数判断大小中精度误差导致的信号计算错误问题。
+
 ## Release 1.0
 ### 环境参数
 ```

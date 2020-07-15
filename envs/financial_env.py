@@ -232,7 +232,7 @@ class FinancialEnv(gym.Env):
             ma_signals = []
             for ma_s_val in ma_s:
                 for ma_l_val in ma_l:
-                    ma_signals.append(int(ma_s_val > ma_l_val))
+                    ma_signals.append(int((ma_s_val - ma_l_val) > 1e-6))
             signals += ma_signals
 
             # Momentum 信号
@@ -241,7 +241,7 @@ class FinancialEnv(gym.Env):
                 if l == 0 or l > len(self.past_30_day_close):
                     momentum.append(0)
                 else:
-                    momentum.append(int(self.prices[self.cur_pos] > self.past_30_day_close[-l]))
+                    momentum.append(int((self.prices[self.cur_pos] - self.past_30_day_close[-l]) > 1e-6))
             signals += momentum
 
             # On-Balance Volume 长短期信号
@@ -260,7 +260,7 @@ class FinancialEnv(gym.Env):
             ma_obv_signals = []
             for ma_obv_s_val in ma_obv_s:
                 for ma_obv_l_val in ma_obv_l:
-                    ma_obv_signals.append(int(ma_obv_s_val > ma_obv_l_val))
+                    ma_obv_signals.append(int((ma_obv_s_val - ma_obv_l_val) > 1e-6))
             signals += ma_obv_signals
 
             if self.state_type == '1':
@@ -434,9 +434,13 @@ if __name__ == '__main__':
         import random
         ac = np.random.randint(0, 2)
         ob, r, done, info = env.step(ac, by_day=False)
+        # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos], env.bar_vol[env.cur_pos],
+        #       env.bar_opens[env.cur_pos], env.cur_obv, env.observation)
         rwd += r
         if done:
             print(env.assets, env.cur_pos, rwd, env.past_30_day_obv, env.past_30_day_close)
             rwd = 0
             env.reset()
+        if env.cur_pos == 290:
+            break
         # print(r)
