@@ -4,6 +4,7 @@ from gym.utils import seeding
 import numpy as np
 import datetime
 import os
+from copy import deepcopy
 import pandas as pd
 
 ACTIONS_MEANING = {
@@ -27,6 +28,7 @@ class FinancialEnv(gym.Env):
     def __init__(self, config,
                  state=None,
                  reward=None,
+                 look_back=10,
                  log_return=False,
                  tax_multiple=1,
                  short_term=None,
@@ -40,8 +42,10 @@ class FinancialEnv(gym.Env):
         self.state_type = state
         assert reward in REWARDS, 'Invalid Reward Type, Should be one of {}'.format(REWARDS)
         self.reward_type = reward
+        self.look_back = look_back
         self._set_boundaries()
         self.observation_space = Box(low=self.low, high=self.high, dtype=np.float32)
+        self.observation = []
         self.action_space = Discrete(3)
 
         self.log_return = log_return
@@ -88,6 +92,7 @@ class FinancialEnv(gym.Env):
             self.past_30_day_obv = []
             self.past_30_day_close = []
 
+        self.observation = []
         self.trading_ticks = 0
         self.cash = self.capital_base
         self.position = 0
@@ -183,13 +188,20 @@ class FinancialEnv(gym.Env):
         """
         if self.state_type == '0':
             # 前50分钟价差
-            head_idx = max(0, self.cur_pos - 50)
-            prev_51_prices = np.log(self.prices[head_idx:self.cur_pos + 1])
-            delta_50min_prices = np.diff(prev_51_prices)
-            if delta_50min_prices.shape[0] != 50:
-                delta_50min_prices = np.concatenate(
-                    (np.zeros((50 - delta_50min_prices.shape[0],)), delta_50min_prices), axis=0)
-            return delta_50min_prices
+            if self.cur_pos != 0:
+                cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
+            else:
+                cur_delta_price = 0.
+            self.observation.append([cur_delta_price])
+            if len(self.observation) < self.look_back:
+                return np.concatenate((
+                    np.zeros((self.look_back - len(self.observation), 1)), np.array(self.observation)), axis=0)
+            elif len(self.observation) > self.look_back:
+                del self.observation[0]
+                assert len(self.observation) == self.look_back
+                return np.array(self.observation)
+            else:
+                return np.array(self.observation)
         elif self.state_type == '1' or self.state_type == '2' or self.state_type == '3':
             """
             14 Technical Indicators Analysed In -- C. J. Neely, D. E. Rapach, J. Tu, and G. Zhou,
@@ -244,19 +256,46 @@ class FinancialEnv(gym.Env):
                 for ma_obv_l_val in ma_obv_l:
                     ma_obv_signals.append(int(ma_obv_s_val > ma_obv_l_val))
             signals += ma_obv_signals
+
             if self.state_type == '1':
-                return np.array(signals)
+                self.observation.append(deepcopy(signals))
+                if len(self.observation) < self.look_back:
+                    return np.concatenate((
+                        np.zeros((self.look_back - len(self.observation), 14)), np.array(self.observation)), axis=0)
+                elif len(self.observation) > self.look_back:
+                    del self.observation[0]
+                    assert len(self.observation) == self.look_back
+                    return np.array(self.observation)
+                else:
+                    return np.array(self.observation)
+
             elif self.state_type == '2':
-                return np.array(signals + [self.position])
+                self.observation.append(signals + [self.position])
+                if len(self.observation) < self.look_back:
+                    return np.concatenate((
+                        np.zeros((self.look_back - len(self.observation), 15)), np.array(self.observation)), axis=0)
+                elif len(self.observation) > self.look_back:
+                    del self.observation[0]
+                    assert len(self.observation) == self.look_back
+                    return np.array(self.observation)
+                else:
+                    return np.array(self.observation)
+
             elif self.state_type == '3':
-                # 前50分钟价差
-                head_idx = max(0, self.cur_pos - 10)
-                prev_11_prices = np.log(self.prices[head_idx:self.cur_pos + 1])
-                delta_10min_prices = np.diff(prev_11_prices)
-                if delta_10min_prices.shape[0] != 10:
-                    delta_10min_prices = np.concatenate(
-                        (np.zeros((10 - delta_10min_prices.shape[0],)), delta_10min_prices), axis=0)
-                return np.array(list(delta_10min_prices) + signals + [self.position])
+                if self.cur_pos != 0:
+                    cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
+                else:
+                    cur_delta_price = 0.
+                self.observation.append([cur_delta_price] + signals + [self.position])
+                if len(self.observation) < self.look_back:
+                    return np.concatenate((
+                        np.zeros((self.look_back - len(self.observation), 16)), np.array(self.observation)), axis=0)
+                elif len(self.observation) > self.look_back:
+                    del self.observation[0]
+                    assert len(self.observation) == self.look_back
+                    return np.array(self.observation)
+                else:
+                    return np.array(self.observation)
         else:
             raise NotImplementedError
 
@@ -289,17 +328,17 @@ class FinancialEnv(gym.Env):
 
     def _set_boundaries(self):
         if self.state_type == '0':
-            self.high = np.array([5] * 50)
-            self.low = np.array([-5] * 50)
+            self.high = np.array([[5] * 1] * self.look_back)
+            self.low = np.array([[-5] * 1] * self.look_back)
         elif self.state_type == '1':
-            self.high = np.array([1] * 14)
-            self.low = np.array([0] * 14)
+            self.high = np.array([[1] * 14] * self.look_back)
+            self.low = np.array([[0] * 14] * self.look_back)
         elif self.state_type == '2':
-            self.high = np.array([1] * 14 + [1])
-            self.low = np.array([0] * 14 + [-1])
+            self.high = np.array([[1] * 14 + [1]] * self.look_back)
+            self.low = np.array([[0] * 14 + [-1]] * self.look_back)
         elif self.state_type == '3':
-            self.high = np.array([5] * 10 + [1] * 14 + [1])
-            self.low = np.array([-5] * 10 + [0] * 14 + [-1])
+            self.high = np.array([[5] + [1] * 14 + [1]] * self.look_back)
+            self.low = np.array([[-5] + [0] * 14 + [-1]] * self.look_back)
         else:
             raise NotImplementedError
 
@@ -379,7 +418,7 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(1, state='3', reward='running_SR')
+    env = FinancialEnv(1, state='0', reward='running_SR')
     env.reset()
     rwd = 0
     while True:

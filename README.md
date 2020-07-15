@@ -1,5 +1,13 @@
 # RLmenthodsInTrading
 该项目基于不同的强化学习算法，定义了数种State和Reward，以研究在中国金融市场中哪些组合可以获得比较高的收益。
+## Release 1.1
+加入look back参数，默认为10，控制某个时刻向前看的长度
+```
+env = FinancialEnv(config, state='3', reward='running_SR', look_back=10)
+```
+影响返回的observation，shape分别为（look_back, 1） / （look_back, 14） / （look_back, 15） /（look_back, 16）。
+
+
 ## Release 1.0
 ### 环境参数
 ```
