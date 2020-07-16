@@ -355,7 +355,7 @@ class FinancialEnv(gym.Env):
             if self.indices[prev_idx].date() != self.indices[self.cur_pos].date():
                 break
             prev_idx += 1
-        self.get_ob()
+        return self.get_ob()
 
     def update_assets(self):
         self.assets = self.cash + self.shares * self.prices[self.cur_pos]
