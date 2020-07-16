@@ -4,9 +4,13 @@
 加入look back参数，默认为10，控制某个时刻向前看的长度
 ```
 env = FinancialEnv(config, state='3', reward='running_SR', look_back=10)
+ob, r, done, info = env.step(ac, by_day=False)
 ```
 影响返回的observation，shape分别为（look_back, 1） / （look_back, 14） / （look_back, 15） /（look_back, 16）。
 
+回测时将by_day设为False，即会一直连续交易，与一般回测流程保持一致。
+
+消除了一些特殊情形下，浮点数判断大小中精度误差导致的信号计算错误问题。
 
 ## Release 1.0
 ### 环境参数

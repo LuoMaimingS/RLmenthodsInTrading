@@ -25,7 +25,7 @@ CHECKED_SECURITIES = ['IF9999.CCFX']
 
 
 class FinancialEnv(gym.Env):
-    def __init__(self, config,
+    def __init__(self,
                  state=None,
                  reward=None,
                  look_back=10,
@@ -33,7 +33,6 @@ class FinancialEnv(gym.Env):
                  tax_multiple=1,
                  short_term=None,
                  long_term=None):
-        # config 未设置完成，手动赋值
         self.security = 'IF9999.CCFX'
         self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
@@ -67,6 +66,7 @@ class FinancialEnv(gym.Env):
         # for SR
         self.A_n = 0.
         self.B_n = 0.
+        self.prev_running_sr = 0.
 
         # for indicators
         self.cur_obv = 0
@@ -102,10 +102,11 @@ class FinancialEnv(gym.Env):
         # for SR
         self.A_n = 0.
         self.B_n = 0.
+        self.prev_running_sr = 0.
 
         # for indicators
         # Init OBV.
-        self.cur_obv += self.bar_vol[self.cur_pos] * np.sign(self.prices[self.cur_pos] - self.bar_opens[self.cur_pos])
+        self.cur_obv = self.bar_vol[self.cur_pos] * np.sign(self.prices[self.cur_pos] - self.bar_opens[self.cur_pos])
         return self.get_ob()
 
     def step(self, action, by_day=True):
@@ -127,6 +128,11 @@ class FinancialEnv(gym.Env):
             self.past_30_day_close = []
         elif self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
             # 进入新的交易日，将昨日的相关日级指标更新，且保持追踪30天历史
+            if not by_day:
+                self.last_obv = self.cur_obv
+                self.cur_obv = self.bar_vol[self.cur_pos] * np.sign(
+                    self.prices[self.cur_pos] - self.bar_opens[self.cur_pos])
+
             if len(self.past_30_day_close) == 30:
                 del self.past_30_day_close[0]
                 del self.past_30_day_obv[0]
@@ -226,7 +232,7 @@ class FinancialEnv(gym.Env):
             ma_signals = []
             for ma_s_val in ma_s:
                 for ma_l_val in ma_l:
-                    ma_signals.append(int(ma_s_val > ma_l_val))
+                    ma_signals.append(int((ma_s_val - ma_l_val) > 1e-6))
             signals += ma_signals
 
             # Momentum 信号
@@ -235,7 +241,7 @@ class FinancialEnv(gym.Env):
                 if l == 0 or l > len(self.past_30_day_close):
                     momentum.append(0)
                 else:
-                    momentum.append(int(self.prices[self.cur_pos] > self.past_30_day_close[-l]))
+                    momentum.append(int((self.prices[self.cur_pos] - self.past_30_day_close[-l]) > 1e-6))
             signals += momentum
 
             # On-Balance Volume 长短期信号
@@ -254,7 +260,7 @@ class FinancialEnv(gym.Env):
             ma_obv_signals = []
             for ma_obv_s_val in ma_obv_s:
                 for ma_obv_l_val in ma_obv_l:
-                    ma_obv_signals.append(int(ma_obv_s_val > ma_obv_l_val))
+                    ma_obv_signals.append(int((ma_obv_s_val - ma_obv_l_val) > 1e-6))
             signals += ma_obv_signals
 
             if self.state_type == '1':
@@ -322,7 +328,9 @@ class FinancialEnv(gym.Env):
             else:
                 k_n = np.sqrt(n / (n - 1))
                 sr_n = self.A_n / (k_n * np.sqrt(self.B_n - np.square(self.A_n)))
-            return sr_n
+            delta_sr = sr_n - self.prev_running_sr
+            self.prev_running_sr = sr_n
+            return delta_sr
         else:
             raise NotImplementedError
 
@@ -419,17 +427,20 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(1, state='0', reward='running_SR')
+    env = FinancialEnv(state='1', reward='running_SR')
     env.reset()
     rwd = 0
     while True:
         import random
         ac = np.random.randint(0, 2)
-        ob, r, done, info = env.step(ac)
-        # print(env.assets, env.cur_pos, r)
+        ob, r, done, info = env.step(ac, by_day=False)
+        # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos], env.bar_vol[env.cur_pos],
+        #       env.bar_opens[env.cur_pos], env.cur_obv, env.observation)
         rwd += r
         if done:
-            print(env.assets, env.cur_pos, rwd)
+            print(env.assets, env.cur_pos, rwd, env.past_30_day_obv, env.past_30_day_close)
             rwd = 0
             env.reset()
+        if env.cur_pos == 290:
+            break
         # print(r)
