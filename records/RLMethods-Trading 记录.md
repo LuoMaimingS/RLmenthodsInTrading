@@ -28,7 +28,7 @@
 
 - 训练情况
 
-![](/Users/hank/Desktop/rl-trade/records/images/state1-training.png)
+<img src="images/state1-training.png" style="zoom:72%;" />
 
 - 训练集回测
 
@@ -44,7 +44,7 @@
 
 - 训练情况
 
-![](/Users/hank/Desktop/rl-trade/records/images/state2-training.png)
+![](images/state2-training.png)
 
 - 训练集回测
 
