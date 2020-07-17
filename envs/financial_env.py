@@ -25,10 +25,10 @@ CHECKED_SECURITIES = ['IF9999.CCFX']
 
 
 class FinancialEnv(gym.Env):
-    def __init__(self,
-                 state=None,
-                 reward=None,
-                 look_back=10,
+    def __init__(self, config=None,
+                 state='3',
+                 reward='TP',
+                 look_back=50,
                  log_return=False,
                  tax_multiple=1,
                  short_term=None,

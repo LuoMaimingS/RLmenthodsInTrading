@@ -21,3 +21,41 @@
 看到在当前版本，没有学到一个能够表现比baseline好的策略，最好学到了与baseline策略相当的策略。
 
 下一步版本加入更多的feature，看是否feature多了之后能够学到更好的策略。
+
+## version 2（0717）
+
+网络结构与环境设置与version 1保持一致，state不再使用前五十分钟的价差，而是手动提取了14种不同的金融特征。
+
+- 训练情况
+
+![](/Users/hank/Desktop/rl-trade/records/images/state1-training.png)
+
+- 训练集回测
+
+<img src="images/trading_profit_state1_train.png" style="zoom:72%;" />
+
+- 测试集回测
+
+<img src="images/trading_profit_state1_eval.png" style="zoom:72%;" />
+
+## version 3（0717）
+
+网络结构与环境设置与version 2一致，只是在verison2的基础上在state里加入了持仓的情况
+
+- 训练情况
+
+![](/Users/hank/Desktop/rl-trade/records/images/state2-training.png)
+
+- 训练集回测
+
+<img src="images/trading_profit_state2_train.png" style="zoom:72%;" />
+
+- 测试集回测
+
+<img src="images/trading_profit_state2_eval.png" style="zoom:72%;" />
+
+- 总结与下一版本计划
+
+可以看到version 2和version 3的表现基本差不多，在训练过程中都表现不稳定，都没有训练获得表现突出的策略。其中，PPO和SAC趋近于不做动作，而Rainbow和SAC就是没有学到策略，回撤很大。
+
+下一步打算统一各个模型的网络结构，都采用CNN尝试是否有所改善。
