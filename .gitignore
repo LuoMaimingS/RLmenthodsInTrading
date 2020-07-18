@@ -131,3 +131,4 @@ dmypy.json
 # data
 data/
 *.h5
+env_test/
