@@ -1,9 +1,13 @@
 # RLmenthodsInTrading
 该项目基于不同的强化学习算法，定义了数种State和Reward，以研究在中国金融市场中哪些组合可以获得比较高的收益。
+
+## Release 1.2
+加入cheat state (state = '78')，以验证各模块有效性。
+
 ## Release 1.1
 加入look back参数，默认为10，控制某个时刻向前看的长度
 ```
-env = FinancialEnv(config, state='3', reward='running_SR', look_back=10)
+env = FinancialEnv(state='3', reward='running_SR', look_back=10)
 ob, r, done, info = env.step(ac, by_day=False)
 ```
 影响返回的observation，shape分别为（look_back, 1） / （look_back, 14） / （look_back, 15） /（look_back, 16）。
@@ -15,9 +19,8 @@ ob, r, done, info = env.step(ac, by_day=False)
 ## Release 1.0
 ### 环境参数
 ```
-env = FinancialEnv(config, state='3', reward='running_SR')
+env = FinancialEnv(state='3', reward='running_SR')
 ```
-config还未整合，只是个占位符，留待实现，目前对环境没有任何影响
 #### State类别
 ##### 0
 50维。前50分钟的log价差，可以隔日，基于Deng的那篇文章，但是没有加入Momentum

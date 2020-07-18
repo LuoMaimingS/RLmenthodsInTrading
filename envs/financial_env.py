@@ -13,11 +13,13 @@ ACTIONS_MEANING = {
     2: "LONG",
 }
 
-STATES = ['0', '1', '2', '3']
+STATES = ['0', '1', '2', '3', '78']
 # 0: prev 50 minutes delta price
 # 1: 14 technical indicators
 # 2: 14 technical indicators with position
 # 3: prev_10 minutes delta price, 14 technical indicators with position
+
+# 78:cheat states.
 
 REWARDS = ['TP', 'running_SR', 'log_return']
 
@@ -193,7 +195,7 @@ class FinancialEnv(gym.Env):
         获得当前时刻的observation信息
         """
         if self.state_type == '0':
-            # 前50分钟价差
+            # 价差
             if self.cur_pos != 0:
                 cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
             else:
@@ -302,6 +304,16 @@ class FinancialEnv(gym.Env):
                     return np.array(self.observation)
                 else:
                     return np.array(self.observation)
+
+        elif self.state_type == '78':
+            # cheat 价差
+            if self.cur_pos <= len(self.indices) - self.look_back - 2:
+                next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + 11])
+                next_delta_n_prices = np.diff(next_n_prices)
+                return np.reshape(next_delta_n_prices, (self.look_back, 1))
+            else:
+                return np.zeros((self.look_back, 1))
+
         else:
             raise NotImplementedError
 
@@ -347,6 +359,12 @@ class FinancialEnv(gym.Env):
         elif self.state_type == '3':
             self.high = np.array([[5] + [1] * 14 + [1]] * self.look_back)
             self.low = np.array([[-5] + [0] * 14 + [-1]] * self.look_back)
+        elif self.state_type == '3':
+            self.high = np.array([[5] + [1] * 14 + [1]] * self.look_back)
+            self.low = np.array([[-5] + [0] * 14 + [-1]] * self.look_back)
+        elif self.state_type == '78':
+            self.high = np.array([[5] * 1] * self.look_back)
+            self.low = np.array([[-5] * 1] * self.look_back)
         else:
             raise NotImplementedError
 
@@ -427,13 +445,13 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='1', reward='running_SR')
+    env = FinancialEnv(state='78', reward='running_SR')
     env.reset()
     rwd = 0
     while True:
         import random
         ac = np.random.randint(0, 2)
-        ob, r, done, info = env.step(ac, by_day=False)
+        ob, r, done, info = env.step(ac)
         # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos], env.bar_vol[env.cur_pos],
         #       env.bar_opens[env.cur_pos], env.cur_obv, env.observation)
         rwd += r
@@ -441,6 +459,6 @@ if __name__ == '__main__':
             print(env.assets, env.cur_pos, rwd, env.past_30_day_obv, env.past_30_day_close)
             rwd = 0
             env.reset()
-        if env.cur_pos == 290:
-            break
+        # if env.cur_pos == 290:
+        #     break
         # print(r)
