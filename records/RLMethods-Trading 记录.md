@@ -2,7 +2,7 @@
 
 ## version 1 （0715）
 
-- 网络结构，PPO和A3C用的是LSTM，Rainbow和SAC的网络用的全连接网络
+- 网络结构，PPO和A3C用的是LSTM（一层256层的全连接网络+256隐层的LSTM网络），Rainbow和SAC的网络用的全连接网络（Ray 默认的2X256，激活函数为relu）
 - 环境设置，reward用的total profit，state为前50分钟的价差，训练集为2015-01-01到2019-12-31，验证集为2020-01-01到2020-05-31的代码为IF9999.CCFX的股指期货
 - 训练集回测
 

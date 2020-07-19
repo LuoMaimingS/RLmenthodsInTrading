@@ -26,27 +26,29 @@ class TradeModel:
         if model == 'ppo':
             self.trainer = ppo.PPOTrainer
             self.config = ppo.DEFAULT_CONFIG.copy()
-            self.config['num_workers'] = 1
+            self.config['num_workers'] = 16
             # self.config['lr'] = ray.tune.grid_search([1e-3, 5e-4])
             self.config['model'] = {"use_lstm": True}
         elif model == 'a3c':
             self.trainer = a3c.A3CTrainer
             self.config = a3c.DEFAULT_CONFIG.copy()
-            self.config['num_workers'] = 1
+            self.config['num_workers'] = 30
             # self.config['lr'] = ray.tune.grid_search([1e-3, 5e-4])
             self.config['model'] = {"use_lstm": True}
         elif model == 'sac':
             self.trainer = sac.SACTrainer
             self.config = sac.DEFAULT_CONFIG.copy()
+            self.config['num_workers'] = 16
             
         elif model == 'rainbow':
             self.trainer = dqn.DQNTrainer
             self.config = dqn.DEFAULT_CONFIG.copy()
             self.config["n_step"] = 10
-            self.config["noisy"] = True
+            self.config["noisy"] = False
             self.config["num_atoms"] = 4
             self.config["v_min"] = -10.0
             self.config["v_max"] = 10.0
+            self.config['num_workers'] = 16
             
         else:
             raise NotImplementedError
