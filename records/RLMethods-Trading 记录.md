@@ -4,6 +4,8 @@
 
 - 网络结构，PPO和A3C用的是LSTM（一层256层的全连接网络+256隐层的LSTM网络），Rainbow和SAC的网络用的全连接网络（Ray 默认的2X256，激活函数为relu）
 - 环境设置，reward用的total profit，state为前50分钟的价差，训练集为2015-01-01到2019-12-31，验证集为2020-01-01到2020-05-31的代码为IF9999.CCFX的股指期货
+  - state：前50分钟的价格取log后做差
+  - total profit：做出动作并得到交易后，agent的资产与上一时刻的差值，Deng的文章中曾使用的reward。
 - 训练集回测
 
 <img src="images/trading_profit_state0-tain.png" style="zoom:72%;" />
@@ -26,7 +28,18 @@
 
 网络结构与环境设置与version 1保持一致，state不再使用前五十分钟的价差，而是手动提取了14种不同的金融特征。
 
-- 训练情况
+- state：2014年一篇文章中的分析的14个交易信号，长短期MA的交界处产生信号变动，短期天数为{1, 2, 3}，长期天数为{9, 12}，两个集合的笛卡尔积有6个元素。
+
+  - MA(1, 9)，MA(2, 9)，MA(3, 9)，MA(1, 12)，MA(2, 12)，MA(3, 12)
+  - MOMENTUM(9)，MOMENTUM(12)
+  - OBV(1, 9)，OBV(2, 9)，OBV(3, 9)，OBV(1, 12)，OBV(2, 12)，OBV(3, 12)
+
+- reward包括version 1的total profit，以及
+
+  - log return：做出动作后并得到交易后，agent与上个时刻相比的收益情况，使用对数收益率，以满足reward可线性相加。
+  - running sharp ratio：增量式更新的sharpe ratio，便于计算及网络参数更新。
+
+  结果表明，使用这3种reward的差别不大，曲线基本相似。
 
 <img src="images/state1-training.png" style="zoom:72%;" />
 
