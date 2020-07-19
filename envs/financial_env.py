@@ -30,7 +30,7 @@ class FinancialEnv(gym.Env):
     def __init__(self, config=None,
                  state='3',
                  reward='TP',
-                 look_back=50,
+                 look_back=10,
                  log_return=False,
                  tax_multiple=1,
                  short_term=None,
@@ -308,7 +308,7 @@ class FinancialEnv(gym.Env):
         elif self.state_type == '78':
             # cheat 价差
             if self.cur_pos <= len(self.indices) - self.look_back - 2:
-                next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + 11])
+                next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + self.look_back + 1])
                 next_delta_n_prices = np.diff(next_n_prices)
                 return np.reshape(next_delta_n_prices, (self.look_back, 1))
             else:
@@ -445,19 +445,19 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='78', reward='running_SR')
-    env.reset()
+    env = FinancialEnv(state='78', reward='TP')
+    ob = env.reset()
     rwd = 0
     while True:
         import random
-        ac = np.random.randint(0, 2)
+        ac = int(np.sign(ob[0, 0])) + 1
         ob, r, done, info = env.step(ac)
         # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos], env.bar_vol[env.cur_pos],
         #       env.bar_opens[env.cur_pos], env.cur_obv, env.observation)
         rwd += r
         if done:
-            print(env.assets, env.cur_pos, rwd, env.past_30_day_obv, env.past_30_day_close)
-            rwd = 0
+            print(env.assets, env.cur_pos)
+            # rwd = 0
             env.reset()
         # if env.cur_pos == 290:
         #     break
