@@ -49,7 +49,30 @@ class TradeModel:
             self.config["v_min"] = -10.0
             self.config["v_max"] = 10.0
             self.config['num_workers'] = 16
-            
+        elif model == 'apx':
+            self.trainer = dqn.DQNTrainer
+            self.config = dqn.DEFAULT_CONFIG.copy()
+            self.config.update({
+                "n_step": 3,
+                "num_gpus": 1,
+                "num_workers": 30,
+                "buffer_size": 2000000,
+                "learning_starts": 50000,
+                "train_batch_size": 512,
+                "rollout_fragment_length": 50,
+                "target_network_update_freq": 500000,
+                "timesteps_per_iteration": 25000,
+                "exploration_config": {"type": "PerWorkerEpsilonGreedy"},
+                "worker_side_prioritization": True,
+                "min_iter_time_s": 30,
+                "training_intensity": None,
+            })
+            self.config["optimizer"].update({
+                "max_weight_sync_delay": 400,
+                "num_replay_buffer_shards": 4,
+                "debug": False
+            })
+            self.config["optimizer"].update({"fcnet_hiddens": [256, 256, 256]})
         else:
             raise NotImplementedError
         
