@@ -30,6 +30,7 @@ class FinancialEnv(gym.Env):
     def __init__(self, config=None,
                  state='3',
                  reward='TP',
+                 forward_reward=False,
                  look_back=10,
                  log_return=False,
                  tax_multiple=1,
@@ -78,6 +79,9 @@ class FinancialEnv(gym.Env):
         self.s = [1, 2, 3] if short_term is None else short_term
         self.l = [9, 12] if long_term is None else long_term
 
+        # for different mode.
+        self.forward_r = forward_reward
+
     def reset(self, by_day=True):
         """
         :param by_day:   若为True，重置时跳到下一天的开始，否则回到第一天
@@ -121,6 +125,7 @@ class FinancialEnv(gym.Env):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         if isinstance(self.action_space, Discrete): action = action - 1
         done = 0
+        reward = 0.
         self.trading_ticks += 1
 
         # Update Past 30 Day Info.
@@ -159,11 +164,12 @@ class FinancialEnv(gym.Env):
 
         # 仓位未变动，只需要刷新资产和收益
         if action == self.position:
-            reward = self.calc_reward()
+            if not self.forward_r: reward = self.calc_reward()
             self.update_assets()
-            # self.log_info()
+            self.log_info()
             self.cur_pos = self.cur_pos + 1 - done
             ob = self.get_ob()
+            if self.forward_r: reward = self.calc_reward()
             return ob, reward, done, {'return': self.cur_return}
 
         # 仓位变化，重计算损益
@@ -178,12 +184,13 @@ class FinancialEnv(gym.Env):
             self.cash = self.cash + abs(new_shares - self.shares) * cur_price * (1 - self.sell_rate * self.tax_multi)
         self.shares = new_shares
         self.position = action
-        reward = self.calc_reward()
+        if not self.forward_r: reward = self.calc_reward()
         self.update_assets()
 
-        # self.log_info()
+        self.log_info()
         self.cur_pos = self.cur_pos + 1 - done
         ob = self.get_ob()
+        if self.forward_r: reward = self.calc_reward()
         return ob, reward, done, {'return': self.cur_return}
 
     def seed(self, seed=None):
@@ -194,10 +201,13 @@ class FinancialEnv(gym.Env):
         """
         获得当前时刻的observation信息
         """
+        next_ret = (self.cash + self.shares * self.prices[self.cur_pos] - self.capital_base) / self.capital_base
+        next_ret = next_ret * (self.position != 0)
         if self.state_type == '0':
             # 价差
             if self.cur_pos != 0:
-                cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
+                # cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
+                cur_delta_price = self.prices[self.cur_pos] - self.prices[self.cur_pos - 1]
             else:
                 cur_delta_price = 0.
             self.observation.append([cur_delta_price])
@@ -278,10 +288,10 @@ class FinancialEnv(gym.Env):
                     return np.array(self.observation)
 
             elif self.state_type == '2':
-                self.observation.append(signals + [self.position])
+                self.observation.append(signals + [self.position] + [next_ret])
                 if len(self.observation) < self.look_back:
                     return np.concatenate((
-                        np.zeros((self.look_back - len(self.observation), 15)), np.array(self.observation)), axis=0)
+                        np.zeros((self.look_back - len(self.observation), 16)), np.array(self.observation)), axis=0)
                 elif len(self.observation) > self.look_back:
                     del self.observation[0]
                     assert len(self.observation) == self.look_back
@@ -294,10 +304,10 @@ class FinancialEnv(gym.Env):
                     cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
                 else:
                     cur_delta_price = 0.
-                self.observation.append([cur_delta_price] + signals + [self.position])
+                self.observation.append([cur_delta_price] + signals + [self.position] + [next_ret])
                 if len(self.observation) < self.look_back:
                     return np.concatenate((
-                        np.zeros((self.look_back - len(self.observation), 16)), np.array(self.observation)), axis=0)
+                        np.zeros((self.look_back - len(self.observation), 17)), np.array(self.observation)), axis=0)
                 elif len(self.observation) > self.look_back:
                     del self.observation[0]
                     assert len(self.observation) == self.look_back
@@ -308,7 +318,8 @@ class FinancialEnv(gym.Env):
         elif self.state_type == '78':
             # cheat 价差
             if self.cur_pos <= len(self.indices) - self.look_back - 2:
-                next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + self.look_back + 1])
+                # next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + self.look_back + 1])
+                next_n_prices = self.prices[self.cur_pos:self.cur_pos + self.look_back + 1]
                 next_delta_n_prices = np.diff(next_n_prices)
                 return np.reshape(next_delta_n_prices, (self.look_back, 1))
             else:
@@ -354,14 +365,11 @@ class FinancialEnv(gym.Env):
             self.high = np.array([[1] * 14] * self.look_back)
             self.low = np.array([[0] * 14] * self.look_back)
         elif self.state_type == '2':
-            self.high = np.array([[1] * 14 + [1]] * self.look_back)
-            self.low = np.array([[0] * 14 + [-1]] * self.look_back)
+            self.high = np.array([[1] * 14 + [1] + [1]] * self.look_back)
+            self.low = np.array([[0] * 14 + [-1] + [-1]] * self.look_back)
         elif self.state_type == '3':
-            self.high = np.array([[5] + [1] * 14 + [1]] * self.look_back)
-            self.low = np.array([[-5] + [0] * 14 + [-1]] * self.look_back)
-        elif self.state_type == '3':
-            self.high = np.array([[5] + [1] * 14 + [1]] * self.look_back)
-            self.low = np.array([[-5] + [0] * 14 + [-1]] * self.look_back)
+            self.high = np.array([[5] + [1] * 14 + [1] + [1]] * self.look_back)
+            self.low = np.array([[-5] + [0] * 14 + [-1] + [-1]] * self.look_back)
         elif self.state_type == '78':
             self.high = np.array([[5] * 1] * self.look_back)
             self.low = np.array([[-5] * 1] * self.look_back)
@@ -417,7 +425,8 @@ class FinancialEnv(gym.Env):
 
     def _get_tax_rate(self):
         if self.security in ['IF9999.CCFX']:
-            self.buy_rate = self.sell_rate = 0.000025
+            self.buy_rate = self.sell_rate = 0.000023
+            # self.buy_rate = self.sell_rate = 0.000345
         else:
             raise NotImplementedError
 
@@ -445,19 +454,22 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='78', reward='TP')
+    env = FinancialEnv(state='2', reward='TP', forward_reward=True)
     ob = env.reset()
     rwd = 0
+    print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
+    print(ob.reshape(1, -1))
     while True:
         import random
         ac = int(np.sign(ob[0, 0])) + 1
         ob, r, done, info = env.step(ac)
-        # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos], env.bar_vol[env.cur_pos],
-        #       env.bar_opens[env.cur_pos], env.cur_obv, env.observation)
+        print(env.cur_pos, ac - 1, r, env.assets, env.indices[env.cur_pos], env.prices[env.cur_pos])
+        print('')
+        print(ob.reshape(1, -1))
         rwd += r
         if done:
-            print(env.assets, env.cur_pos)
-            # rwd = 0
+            print(env.assets, env.cur_pos, rwd)
+            rwd = 0
             env.reset()
         # if env.cur_pos == 290:
         #     break
