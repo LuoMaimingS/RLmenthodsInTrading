@@ -206,8 +206,8 @@ class FinancialEnv(gym.Env):
         if self.state_type == '0':
             # 价差
             if self.cur_pos != 0:
-                # cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
-                cur_delta_price = self.prices[self.cur_pos] - self.prices[self.cur_pos - 1]
+                cur_delta_price = np.log(self.prices[self.cur_pos]) - np.log(self.prices[self.cur_pos - 1])
+                # cur_delta_price = self.prices[self.cur_pos] - self.prices[self.cur_pos - 1]
             else:
                 cur_delta_price = 0.
             self.observation.append([cur_delta_price])
@@ -318,8 +318,8 @@ class FinancialEnv(gym.Env):
         elif self.state_type == '78':
             # cheat 价差
             if self.cur_pos <= len(self.indices) - self.look_back - 2:
-                # next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + self.look_back + 1])
-                next_n_prices = self.prices[self.cur_pos:self.cur_pos + self.look_back + 1]
+                next_n_prices = np.log(self.prices[self.cur_pos:self.cur_pos + self.look_back + 1])
+                # next_n_prices = self.prices[self.cur_pos:self.cur_pos + self.look_back + 1]
                 next_delta_n_prices = np.diff(next_n_prices)
                 return np.reshape(next_delta_n_prices, (self.look_back, 1))
             else:
