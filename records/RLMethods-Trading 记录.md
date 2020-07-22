@@ -73,7 +73,7 @@
 
 下一步打算统一各个模型的网络结构，都采用CNN尝试是否有所改善。
 
-## version 4
+## version 4 （07.20）
 
 - 网络结构，APX模型的网络用的全连接网络（3X256，激活函数为relu）
 - 环境设置，reward用的total profit，state为前50分钟的价差，训练集为2015-01-01到2017-12-31代码为IF9999.CCFX的股指期货
@@ -101,3 +101,31 @@
 
 横坐标为交易的天数，纵坐标为收益率乘以100%
 
+## version 5 （07.22）
+
+- 网络结构，IMPALA模型的网络用的全连接网络（2X512，激活函数为relu）
+
+- 环境设置，reward用的total profit 的收益率乘以百分之百。
+
+  训练集为2015-01-01到2017-12-31三年代码为IF9999.CCFX的分钟级别的股指期货
+
+  - state：state为维度：(n, 17)：前n分钟的log价差，14维的交易信号，agent的当前持仓状态和平仓后的收益率。
+  - total profit：做出动作并得到交易后，agent的资产与上一时刻的差值，Deng的文章中曾使用的reward。
+
+- 训练情况
+
+用ray在一个GPU和30个CPU上训练了200M的steps，训练过程如下
+
+<img src="images/impala-training-curve.png" style="zoom:50%;" />
+
+可以看到，随着训练的进行，mean reward一直在上升趋势，说明算法一直在更新，且取得了比较好的效果
+
+- 在训练数据上回测
+
+我们在三年的数据上进行回测，并与Short Only和Long Only对比。横坐标为交易的天数，共为三年的交易日。纵坐标为收益率乘以100%，初始资金为100000。
+
+<img src="images/trading_profit_impala.png" style="zoom:72%;" />
+
+- 总结与下一版本计划
+
+可以看到IMPALA模型能够在训练集学到很强的策略，接下来打算在更多的数据上进行训练，并在验证集上验证其扩展性。
