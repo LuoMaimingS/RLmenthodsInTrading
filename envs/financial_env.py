@@ -28,17 +28,17 @@ CHECKED_SECURITIES = ['IF9999.CCFX']
 
 class FinancialEnv(gym.Env):
     def __init__(self, config=None,
-                 state='3',
+                 state='1',
                  reward='TP',
                  forward_reward=False,
-                 look_back=10,
+                 look_back=50,
                  log_return=False,
                  tax_multiple=1,
                  short_term=None,
                  long_term=None):
         self.security = 'IF9999.CCFX'
         self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2017-12-31', '%Y-%m-%d')
 
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
@@ -337,7 +337,7 @@ class FinancialEnv(gym.Env):
         """
         if self.reward_type == 'TP':
             tp_reward = self.cash + self.shares * self.prices[self.cur_pos] - self.assets
-            return tp_reward
+            return tp_reward / self.capital_base * 100
         elif self.reward_type == 'log_return':
             cur_assets = self.cash + self.shares * self.prices[self.cur_pos]
             origin_return = (cur_assets - self.assets) / self.assets
