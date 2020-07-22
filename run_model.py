@@ -5,6 +5,7 @@ import ray.rllib.agents.ppo as ppo
 import ray.rllib.agents.a3c as a3c
 import ray.rllib.agents.sac as sac
 import ray.rllib.agents.dqn as dqn
+from ray.tune.registry import register_env
 import os
 import numpy as np
 from ray.rllib.examples.models.rnn_model import RNNModel
@@ -17,9 +18,15 @@ import matplotlib.pyplot as plt
 
 ModelCatalog.register_custom_model("rnn",  RNNModel)
 
+def env_creator(env_config):
+    print(env_config)
+    env = FinancialEnv(state=env_config['state'], reward=env_config['reward'], look_back=env_config['lookback'])
+    return env
+register_env("fin_env", env_creator)
+
 
 class TradeModel:
-    def __init__(self, model='ppo', env=FinancialEnv, stop=None, net_type="rnn"):
+    def __init__(self, model='ppo', env='fin_env', env_config={}, stop=None, net_type="rnn"):
         self.env = env
         self.model = model
         self.net_type = net_type
@@ -77,6 +84,7 @@ class TradeModel:
             raise NotImplementedError
         
         self.config['env'] = self.env
+        self.config['env_config'] = env_config
         self.config['num_gpus'] = 1
         self.config['framework'] = "tf"
         self.stop = stop
@@ -84,10 +92,12 @@ class TradeModel:
         ray.init()
 
     def train(self):
+        print(self.config)
         tune.run(self.trainer, config=self.config, stop=self.stop, checkpoint_freq=20)
 
     def evaluate(self, checkpoint):
         self.config['in_evaluation'] = True
+        self.config['num_workers'] = 1
         agent = self.trainer(config=self.config, env=self.env)
         chkpath = os.path.join(os.path.abspath('.'), 'checkpoint/')
         print(chkpath)
@@ -140,12 +150,23 @@ if __name__ == "__main__":
     parser.add_argument("--torch", action="store_true")
     parser.add_argument("--stop-reward", type=float, default=2000)
     parser.add_argument("--stop-iters", type=int, default=100000)
+    parser.add_argument("--state", type=str, default="0")
+    parser.add_argument("--reward", type=str, default="TP")
+    parser.add_argument("--lookback", type=int, default=10)
+    parser.add_argument("--training", type=int, default=1)
     parser.add_argument("--checknum", type=str, default="4180")
     args = parser.parse_args()
     stop = {
         "episode_reward_mean": args.stop_reward,
         "training_iteration": args.stop_iters,
     }
-    model = TradeModel(model=args.run, env=FinancialEnv, stop=stop, net_type=args.net_type)
-    model.train()
-    # model.evaluate(checkpoint=args.run+"/tp/checkpoint_"+args.checknum+"/checkpoint-"+args.checknum)
+    env_config = {}
+    env_config["state"] = args.state
+    env_config["reward"] = args.reward
+    env_config["lookback"] = args.lookback
+    print(env_config)
+    model = TradeModel(model=args.run, env='fin_env', env_config=env_config, stop=stop, net_type=args.net_type)
+    if args.training:
+        model.train()
+    else:
+        model.evaluate(checkpoint=args.run+"/tp/checkpoint_"+args.checknum+"/checkpoint-"+args.checknum)
