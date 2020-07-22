@@ -6,6 +6,7 @@ import datetime
 import os
 from copy import deepcopy
 import pandas as pd
+import random
 
 ACTIONS_MEANING = {
     0: "SHORT",
@@ -35,7 +36,8 @@ class FinancialEnv(gym.Env):
                  log_return=False,
                  tax_multiple=1,
                  short_term=None,
-                 long_term=None):
+                 long_term=None,
+                 shuffle_reset=False):
         self.security = 'IF9999.CCFX'
         self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2017-12-31', '%Y-%m-%d')
@@ -81,19 +83,20 @@ class FinancialEnv(gym.Env):
 
         # for different mode.
         self.forward_r = forward_reward
+        self.shuffle_reset = shuffle_reset
 
-    def reset(self, by_day=True, shuffle=False):
+    def reset(self, by_day=True):
         """
         :param by_day:   若为True，重置时跳到下一天的开始，否则回到第一天
         :param shuffle:  是否随机重置
         :return:
         """
-        if shuffle:
+        if self.shuffle_reset:
             assert self.state_type == '0', 'State type should be 0 when apply shuffle in reset().'
         if not by_day:
             self.cur_pos = 0
         else:
-            self.jmp_to_next_day(shuffle=shuffle)
+            self.jmp_to_next_day(shuffle=self.shuffle_reset)
 
         # for indicators
         if self.cur_pos == 0:
@@ -459,7 +462,7 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='0', reward='TP', forward_reward=True)
+    env = FinancialEnv(state='0', reward='TP', look_back=10, shuffle_reset=True)
     ob = env.reset()
     rwd = 0
     # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
@@ -467,15 +470,16 @@ if __name__ == '__main__':
     while True:
         import random
         ac = int(np.sign(ob[0, 0])) + 1
+        print(ob.reshape(1, -1), env.indices[env.cur_pos], env.prices[env.cur_pos])
         ob, r, done, info = env.step(ac)
-        # print(env.cur_pos, ac - 1, r, env.assets, env.indices[env.cur_pos], env.prices[env.cur_pos])
-        # print('')
-        # print(ob.reshape(1, -1))
+        print(env.cur_pos, ac - 1, r, env.assets)
+        print('')
+
         rwd += r
         if done:
             print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd)
             rwd = 0
-            env.reset(shuffle=True)
+            env.reset()
         # if env.cur_pos == 290:
         #     break
         # print(r)
