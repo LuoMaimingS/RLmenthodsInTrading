@@ -82,15 +82,18 @@ class FinancialEnv(gym.Env):
         # for different mode.
         self.forward_r = forward_reward
 
-    def reset(self, by_day=True):
+    def reset(self, by_day=True, shuffle=False):
         """
         :param by_day:   若为True，重置时跳到下一天的开始，否则回到第一天
+        :param shuffle:  是否随机重置
         :return:
         """
+        if shuffle:
+            assert self.state_type == '0', 'State type should be 0 when apply shuffle in reset().'
         if not by_day:
             self.cur_pos = 0
         else:
-            self.jmp_to_next_day()
+            self.jmp_to_next_day(shuffle=shuffle)
 
         # for indicators
         if self.cur_pos == 0:
@@ -166,7 +169,7 @@ class FinancialEnv(gym.Env):
         if action == self.position:
             if not self.forward_r: reward = self.calc_reward()
             self.update_assets()
-            self.log_info()
+            # self.log_info()
             self.cur_pos = self.cur_pos + 1 - done
             ob = self.get_ob()
             if self.forward_r: reward = self.calc_reward()
@@ -187,7 +190,7 @@ class FinancialEnv(gym.Env):
         if not self.forward_r: reward = self.calc_reward()
         self.update_assets()
 
-        self.log_info()
+        # self.log_info()
         self.cur_pos = self.cur_pos + 1 - done
         ob = self.get_ob()
         if self.forward_r: reward = self.calc_reward()
@@ -376,10 +379,12 @@ class FinancialEnv(gym.Env):
         else:
             raise NotImplementedError
 
-    def jmp_to_next_day(self):
+    def jmp_to_next_day(self, shuffle=False):
         """
         跳转到下一天的开始
         """
+        if shuffle:
+            self.cur_pos = random.randint(0, self.total_minutes - 1)
         prev_idx = self.cur_pos
         while 1:
             if self.cur_pos >= len(self.indices) - 1 or self.cur_pos == 0:
@@ -414,7 +419,7 @@ class FinancialEnv(gym.Env):
 
         self.indices = self.data.index.tolist()
         self.total_minutes = len(self.indices)
-        self.total_days = int(self.total_minutes / 240)
+        self.total_days = int(self.total_minutes / 270)
         self.base_price = self.data.loc[self.indices[0]]['open']
 
         ok = 1 if self.security in CHECKED_SECURITIES else self.find_incomplete_day()
@@ -454,23 +459,23 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='2', reward='TP', forward_reward=True)
+    env = FinancialEnv(state='0', reward='TP', forward_reward=True)
     ob = env.reset()
     rwd = 0
-    print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
-    print(ob.reshape(1, -1))
+    # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
+    # print(ob.reshape(1, -1))
     while True:
         import random
         ac = int(np.sign(ob[0, 0])) + 1
         ob, r, done, info = env.step(ac)
-        print(env.cur_pos, ac - 1, r, env.assets, env.indices[env.cur_pos], env.prices[env.cur_pos])
-        print('')
-        print(ob.reshape(1, -1))
+        # print(env.cur_pos, ac - 1, r, env.assets, env.indices[env.cur_pos], env.prices[env.cur_pos])
+        # print('')
+        # print(ob.reshape(1, -1))
         rwd += r
         if done:
-            print(env.assets, env.cur_pos, rwd)
+            print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd)
             rwd = 0
-            env.reset()
+            env.reset(shuffle=True)
         # if env.cur_pos == 290:
         #     break
         # print(r)
