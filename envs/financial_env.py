@@ -39,9 +39,13 @@ class FinancialEnv(gym.Env):
                  long_term=None,
                  shuffle_reset=False):
         self.security = 'IF9999.CCFX'
+        
         self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2017-12-31', '%Y-%m-%d')
-
+        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        """
+        self.start_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2020-05-31', '%Y-%m-%d')
+        """
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
         assert reward in REWARDS, 'Invalid Reward Type, Should be one of {}'.format(REWARDS)
