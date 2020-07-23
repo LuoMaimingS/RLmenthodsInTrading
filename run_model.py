@@ -45,7 +45,6 @@ class TradeModel:
             self.trainer = a3c.A3CTrainer
             self.config = a3c.DEFAULT_CONFIG.copy()
             self.config['num_workers'] = 30
-            # self.config['lr'] = ray.tune.grid_search([1e-3, 5e-4])
             self.config['model'] = {"use_lstm": True}
         elif model == 'sac':
             self.trainer = sac.SACTrainer
@@ -61,10 +60,12 @@ class TradeModel:
             self.config["v_min"] = -10.0
             self.config["v_max"] = 10.0
             self.config['num_workers'] = 16
-        elif model == 'apx':
+        elif model == 'apex':
             self.trainer = dqn.ApexTrainer
             self.config = dqn.apex.APEX_DEFAULT_CONFIG.copy()
             self.config["optimizer"].update({"fcnet_hiddens": [512, 512]})
+            self.config["lr"] = ray.tune.grid_search([5e-4, 3e-4])
+            self.config['num_workers'] = 30
         elif model == 'impala':
             self.trainer = impala.ImpalaTrainer
             self.config = impala.DEFAULT_CONFIG.copy()
@@ -90,16 +91,16 @@ class TradeModel:
         self.config['num_workers'] = 1
         agent = self.trainer(config=self.config, env=self.env)
         chkpath = os.path.join(os.path.abspath('.'), 'checkpoint/')
-        print(chkpath)
+        print(chkpath, self.env_config)
         agent.restore(chkpath+checkpoint)
-        self.env = FinancialEnv(self.env_config['state'], reward=self.env_config['reward'], look_back=self.env_config['lookback'])
+        self.env = FinancialEnv(state=self.env_config['state'], reward=self.env_config['reward'], look_back=self.env_config['lookback'])
         obs = self.env.reset()
         done = False
         episode_reward = 0.0
         reward_list = []
         if self.net_type == "rnn":
-            h = np.zeros(shape=[64])
-            c = np.zeros(shape=[64])
+            h = np.zeros(shape=[256])
+            c = np.zeros(shape=[256])
             _state = [h, c]
         else:
             _state = None
@@ -123,13 +124,13 @@ class TradeModel:
             obs = self.env.reset()
             if self.env.cur_pos == 0:
                 break
-        np.savez(self.model+"-tp-state0-eval.npz", profit=np.array(reward_list))
+        np.savez(self.model+"-tp-state"+self.env_config["state"]+"-train.npz", profit=np.array(reward_list))
         
         plt.plot(reward_list)
         plt.title("trading model "+self.model+", reward TP")
         plt.xlabel("trading days")
         plt.ylabel("total profit")
-        plt.savefig(self.model+"-tp-state0-eval.png")      
+        plt.savefig(self.model+"-tp-state"+self.env_config["state"]+"-train.png")      
 
 
 if __name__ == "__main__":
