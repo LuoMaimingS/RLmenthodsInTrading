@@ -35,12 +35,12 @@ earning rate: Total earning rate
 log_return: Log earning rate
 running_SR: running sharp ratio
 """
-REWARDS = ['TP', 'earning rate', 'log_return', 'running_SR']
+REWARDS = ['TP', 'earning_rate', 'log_return', 'running_SR']
 
 """
 IF9999.CCFX: 在2016年1月1日前（不包括）每天有 270 个 bar，之后每天有 240 个 bar
 """
-CHECKED_SECURITIES = ['IF9999']
+CHECKED_SECURITIES = ['IF9999.CCFX']
 
 
 class FinancialEnv(gym.Env):
@@ -55,7 +55,7 @@ class FinancialEnv(gym.Env):
                  short_term=None,
                  long_term=None,
                  shuffle_reset=False):
-        self.security = 'IF9999'
+        self.security = 'IF9999.CCFX'
 
         self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
@@ -307,7 +307,7 @@ class FinancialEnv(gym.Env):
             tp_reward = self.cash + self.shares * self.prices[self.cur_pos] - self.assets
             return tp_reward
         elif self.reward_type == 'earning_rate':
-            er = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets
+            er = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets * 100
             return er
         elif self.reward_type == 'log_return':
             cur_assets = self.cash + self.shares * self.prices[self.cur_pos]

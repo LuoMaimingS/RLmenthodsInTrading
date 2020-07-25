@@ -163,3 +163,35 @@
 从上述结果可以看到当前的IMPALA模型能够在训练数据上获得很好的训练效果但是扩展性不好，需要在接下来的工作中继续探索解决方案
 
 下一步会继续探索更多的模型，并尝试Conv1D网络代替全连接网络。
+
+## version 7（0725）
+
+- 网络结构，IMPALA模型的网络用的Conv1D网络（Conv1D(128, kernel=5)->Dropout(0.5)->Conv1d(128, kernel=5)->fully_connect(512)，激活函数为relu）
+
+- 环境设置，reward用的total profit 的收益率乘以百分之百。
+
+  训练集为2015-01-01到2015-12-31一年的年代码为IF9999.CCFX的分钟级别的股指期货
+
+  - state：state为维度：(n, 17)：前n分钟的log价差，14维的交易信号，agent的当前持仓状态和平仓后的收益率。
+  - total profit：做出动作并得到交易后，agent的资产与上一时刻的差值，Deng的文章中曾使用的reward。
+
+- 训练情况
+
+用ray在一个GPU和30个CPU上训练了60M的steps，训练过程如下，可以看到随着训练的进行可以在一年的数据持续进行更新
+
+<img src="images/impala-state3-conv1d-trainng-curve-1year.png" style="zoom:50%;" />
+
+说明，开发的CNN模型比较有效
+
+- 训练数据的回测结果
+
+如下图，所示，与训练的轨迹一样，当前模型在回测数据上，基本上一直处在上升趋势，而且基本不存在较大的回撤现象。
+
+<img src="images/trading_profit_impala_train-1year-conv1d.png" style="zoom:72%;" />
+
+- 总结与下一步计划
+
+自己构建的Conv1D模型能够在一年的数据上训练出比较好的结果，表示当前的model是有效的。
+
+由于IMPALA模型支持LSTM网络，因此接下来的计划，打算分别用LSTM，全连接以及Conv1D网络结构在五年数据上进行训练，并比较在不同的网络结构下，在IMPALA模型上训练的效果。
+
