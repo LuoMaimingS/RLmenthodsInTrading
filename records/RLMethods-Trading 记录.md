@@ -195,3 +195,53 @@
 
 由于IMPALA模型支持LSTM网络，因此接下来的计划，打算分别用LSTM，全连接以及Conv1D网络结构在五年数据上进行训练，并比较在不同的网络结构下，在IMPALA模型上训练的效果。
 
+## version 8 （07.28）
+
+本版本，在五年的训练课数据上在IMPALA模型上分布用LSTM网络，全连接和Conv1d网络进行训练，并进行对比
+
+- 网络结构定义如下
+
+  - Conv1D网络（Conv1D(128, kernel=5)->Dropout(0.5)->Conv1d(128, kernel=5)->fully_connected(512)，激活函数为relu）
+  - LSTM网络，fully_connected(512)->LSTM(512)
+  - 全连接网络，fully_connected(512)->fully_connected(512)
+
+- 环境设置，reward用的total profit 的收益率乘以百分之百。
+
+  训练集为2015-01-01到2019-12-31一年的年代码为IF9999.CCFX的分钟级别的股指期货
+
+  - state：state为维度：(n, 17)：前n分钟的log价差，14维的交易信号，agent的当前持仓状态和平仓后的收益率。
+  - total profit：做出动作并得到交易后，agent的资产与上一时刻的差值，Deng的文章中曾使用的reward。
+
+- 训练情况
+
+  三种网络均可以在训练数据上训练得到好的结果
+
+  - FC网络训练reward曲线
+
+  <img src="images/training_curves_impala_fc.png" style="zoom:50%;" />
+
+  - LSTM网络训练的reward曲线
+
+  <img src="images/training_curves_impala_lstm.png" style="zoom:50%;" />
+
+  - Conv1D网络训练的reward曲线
+
+  <img src="images/training_curves_impala_conv1d.png" style="zoom:50%;" />
+
+- 训练数据的回测结果
+
+坐标定义与上面版本定义一致。可以看到在训练数据上，Conv1D网络表现明显优于其他两个。
+
+<img src="images/trading_profit_impala_train_3models.png" style="zoom:72%;" />
+
+- 验证数据上回测结果
+
+从下图回测的结果，三者的回测结果都不理想，表现与在训练中正好相反。
+
+<img src="images/trading_profit_impala_eval_3models.png" style="zoom:72%;" />
+
+- 总结与下一步计划
+
+Conv1D网络能够在训练数据上取得比其他网络更好的训练结果。但是在验证数据上的回测都表现不好。
+
+用Conv1D网络在其他的模型中进行训练，看能否在训练数据取得好的结果。

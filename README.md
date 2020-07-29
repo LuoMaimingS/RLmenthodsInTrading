@@ -2,6 +2,9 @@
 该项目基于不同的强化学习算法，定义了数种State和Reward，以研究在中国金融市场中哪些组合可以获得比较高的收益。
 
 ## Release 2.0
+env中加入delayed_reward参数，为True只有在交易实现时才会有reward，是稀疏的reward实现；为False则同原来一样，不影响。
+
+## Release 2.0
 优化了运行速度，稍微改变了state的维度，所有state设计下，都可以随机reset。初次加载会自动重写数据
 ```angular2html
 env = FinancialEnv(state='2', state_dims=1, reward='TP', look_back=1, tax_multiple=1)

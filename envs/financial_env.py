@@ -49,6 +49,7 @@ class FinancialEnv(gym.Env):
                  state_dims=1,
                  reward='TP',
                  forward_reward=False,
+                 delayed_reward=False,
                  look_back=50,
                  log_return=False,
                  tax_multiple=1,
@@ -101,6 +102,8 @@ class FinancialEnv(gym.Env):
 
         # for different mode.
         self.forward_r = forward_reward
+        self.delayed_reward = delayed_reward
+        self.cost_price = 0.
         self.shuffle_reset = shuffle_reset
 
     def reset(self, by_day=True):
@@ -158,6 +161,7 @@ class FinancialEnv(gym.Env):
 
         # 仓位变化，重计算损益
         cur_price = self.prices[self.cur_pos]
+        self.cost_price = cur_price
         new_shares = int(self.assets * action / (1.05 * cur_price))
         origin_shares = self.shares
         if new_shares > origin_shares:
@@ -303,23 +307,26 @@ class FinancialEnv(gym.Env):
         """
         获得当前时刻的reward信息
         """
+        if not self.delayed_reward:
+            cur_assets = self.cash + self.shares * self.prices[self.cur_pos]
+        else:
+            cur_assets = self.cash + self.shares * self.cost_price
+
         if self.reward_type == 'TP':
-            tp_reward = self.cash + self.shares * self.prices[self.cur_pos] - self.assets
+            tp_reward = cur_assets - self.assets
             return tp_reward
         elif self.reward_type == 'earning_rate':
-            er = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets * 100
+            er = (cur_assets - self.assets) / self.assets * 100
             return er
         elif self.reward_type == 'log_return':
-            cur_assets = self.cash + self.shares * self.prices[self.cur_pos]
             origin_return = (cur_assets - self.assets) / self.assets
             log_return = np.log(1 + origin_return)
             return log_return
         elif self.reward_type == 'running_SR':
             n = self.trading_ticks
-            r_n = (self.cash + self.shares * self.prices[self.cur_pos] - self.assets) / self.assets
+            r_n = (cur_assets - self.assets) / self.assets
             self.A_n = (1 / n) * r_n + (n - 1) / n * self.A_n
             self.B_n = (1 / n) * np.square(r_n) + (n - 1) / n * self.B_n
-            # print(self.A_n, self.B_n, self.trading_ticks)
             if self.trading_ticks == 1 or self.A_n == 0:
                 sr_n = 0
             else:
@@ -342,32 +349,32 @@ class FinancialEnv(gym.Env):
         n = self.look_back
         if self.state_type == '0':
             if self.state_dims == 1:
-                self.high = np.array([1] * (n + 2))
-                self.low = np.array([-1] * (n + 2))
+                self.high = np.array([5] * (n + 2))
+                self.low = np.array([-5] * (n + 2))
             elif self.state_dims == 2:
-                self.high = np.array([[1] * 3] * n)
-                self.low = np.array([[-1] * 3] * n)
+                self.high = np.array([[5] * 3] * n)
+                self.low = np.array([[-5] * 3] * n)
         elif self.state_type == '1':
             if self.state_dims == 1:
-                self.high = np.array([1] * (n * 14))
-                self.low = np.array([-1] * (n * 14))
+                self.high = np.array([5] * (n * 14))
+                self.low = np.array([-5] * (n * 14))
             elif self.state_dims == 2:
-                self.high = np.array([[1] * 14] * n)
-                self.low = np.array([[-1] * 14] * n)
+                self.high = np.array([[5] * 14] * n)
+                self.low = np.array([[-5] * 14] * n)
         elif self.state_type == '2':
             if self.state_dims == 1:
-                self.high = np.array([1] * (n * 14 + 2))
-                self.low = np.array([-1] * (n * 14 + 2))
+                self.high = np.array([5] * (n * 14 + 2))
+                self.low = np.array([-5] * (n * 14 + 2))
             elif self.state_dims == 2:
-                self.high = np.array([[1] * 16] * n)
-                self.low = np.array([[-1] * 16] * n)
+                self.high = np.array([[5] * 16] * n)
+                self.low = np.array([[-5] * 16] * n)
         elif self.state_type == '3':
             if self.state_dims == 1:
-                self.high = np.array([1] * (n * 15 + 2))
-                self.low = np.array([-1] * (n * 15 + 2))
+                self.high = np.array([5] * (n * 15 + 2))
+                self.low = np.array([-5] * (n * 15 + 2))
             elif self.state_dims == 2:
-                self.high = np.array([[1] * 17] * n)
-                self.low = np.array([[-1] * 17] * n)
+                self.high = np.array([[5] * 17] * n)
+                self.low = np.array([[-5] * 17] * n)
         elif self.state_type == '78':
             if self.state_dims == 1:
                 self.high = np.array([5] * n)
@@ -397,7 +404,12 @@ class FinancialEnv(gym.Env):
         return self.get_ob()
 
     def update_assets(self):
-        self.assets = self.cash + self.shares * self.prices[self.cur_pos]
+        if not self.delayed_reward:
+            self.assets = self.cash + self.shares * self.prices[self.cur_pos]
+        else:
+            # 延迟reward，只有当仓位变动时，资产才会变动
+            self.assets = self.cash + self.shares * self.cost_price
+
         if self.log_return:
             self.cur_return = round(np.log(self.assets / self.capital_base), 4)
         else:
@@ -444,6 +456,11 @@ class FinancialEnv(gym.Env):
             self.cur_pos, self.indices[self.cur_pos], self.prices[self.cur_pos],
             self.position, self.cash, self.shares, self.assets))
 
+    def log_info_after_action(self):
+        print('{}th {} price: {:.2f} -> {} current position:{} cash: {:.2f} shares: {:.2f} assets: {:.2f}'.format(
+            self.cur_pos, self.indices[self.cur_pos], self.prices[self.cur_pos - 1], self.prices[self.cur_pos],
+            self.position, self.cash, self.shares, self.assets))
+
     def find_incomplete_day(self, bars_per_day=270):
         prev_idx = 0
         i = 0
@@ -465,19 +482,18 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='3', state_dims=2, reward='TP', look_back=10)
+    env = FinancialEnv(state='3', state_dims=2, reward='TP', look_back=10, delayed_reward=True)
     ob = env.reset()
     rwd = 0
     # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
     # print(ob.reshape(1, -1))
     while True:
         import random
-        ac = 2
+        ac = random.randint(0, 2)
+        # ac = 2
         # print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
         ob, r, done, info = env.step(ac)
-        # if r < -0.0:
-        #     print(env.cur_pos, ac - 1, r, env.assets)
-        #     print('')
+        print(r)
 
         rwd += r
         if done:

@@ -14,15 +14,10 @@ class KerasQConv1d(DistributionalQTFModel):
     def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kw):
         super(KerasQConv1d, self).__init__(
             obs_space, action_space, num_outputs, model_config, name, **kw)
-        print(model_config)
-        training = model_config['custom_model_config']['training']
+        # training = model_config['custom_model_config']['training']
         self.inputs = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
-        conv_1 = tf.keras.layers.Conv1D(filters=128, kernel_size=10, input_shape=obs_space.shape, activation=tf.nn.relu)(self.inputs)
-        if training:
-            conv_1 = tf.keras.layers.Dropout(rate=0.5)(conv_1)
-        conv_2 = tf.keras.layers.Conv1D(filters=128, kernel_size=10, activation=tf.nn.relu)(conv_1)
-        if training:
-            conv_2 = tf.keras.layers.Dropout(rate=0.5)(conv_2)
+        conv_1 = tf.keras.layers.Conv1D(filters=128, kernel_size=5, input_shape=obs_space.shape, activation=tf.nn.relu, kernel_initializer=normc_initializer(1.0))(self.inputs)
+        conv_2 = tf.keras.layers.Conv1D(filters=128, kernel_size=5, activation=tf.nn.relu, kernel_initializer=normc_initializer(1.0))(conv_1)
         flatten_2 = tf.keras.layers.Flatten()(conv_2)
         dense3 = tf.keras.layers.Dense(512, activation=tf.nn.relu, name="dense2", kernel_initializer=normc_initializer(1.0))(flatten_2)
         layer_out = tf.keras.layers.Dense(num_outputs, name="my_out", activation=tf.nn.relu, kernel_initializer=normc_initializer(1.0))(dense3)
