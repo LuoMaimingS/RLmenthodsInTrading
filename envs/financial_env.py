@@ -1,14 +1,12 @@
 import gym
 from gym.spaces import Discrete, Box
 from gym.utils import seeding
-import numpy as np
 import datetime
-import os
 import enum
-import pandas as pd
 import random
 
 from envs.data_rewrite import *
+from envs.env_utils import *
 
 
 class Actions(enum.Enum):
@@ -58,8 +56,8 @@ class FinancialEnv(gym.Env):
                  shuffle_reset=False):
         self.security = 'IF9999.CCFX'
 
-        self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        self.start_date = datetime.datetime.strptime('2013-08-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2015-02-01', '%Y-%m-%d')
         """
         self.start_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2020-05-31', '%Y-%m-%d')
@@ -127,6 +125,7 @@ class FinancialEnv(gym.Env):
         self.A_n = 0.
         self.B_n = 0.
         self.prev_running_sr = 0.
+        # self.log_info()
 
         return self.get_ob()
 
@@ -316,7 +315,7 @@ class FinancialEnv(gym.Env):
             tp_reward = cur_assets - self.assets
             return tp_reward
         elif self.reward_type == 'earning_rate':
-            er = (cur_assets - self.assets) / self.assets * 100
+            er = (cur_assets - self.assets) / self.capital_base * 100
             return er
         elif self.reward_type == 'log_return':
             origin_return = (cur_assets - self.assets) / self.assets
@@ -430,6 +429,7 @@ class FinancialEnv(gym.Env):
         print("读取 {} 数据中......".format(self.security), end='  ')
         raw_data = pd.read_hdf(load_file)
         self.data = raw_data.loc[self.start_date:self.end_date]
+        self.norm_data = MinMaxScaler(self.data)
 
         self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
 
@@ -480,26 +480,38 @@ class FinancialEnv(gym.Env):
         print('{} Checked, *** PLEASE ADD IT TO CHECKED_SECURITIES ***'.format(self.security))
         return True
 
+    def get_batch_data(self, batch_size, seq_len=30, overlap=True):
+        batch_data = list()
+        random_idx = np.random.permutation(self.total_minutes) if overlap else \
+            np.random.permutation(self.total_minutes) // seq_len
+        chosen_idx = random_idx[:batch_size]
+        keys = ['open', 'high', 'low', 'close', 'volume']
+        for i in range(batch_size):
+            if overlap:
+                temp_seq = self.norm_data.loc[self.indices[chosen_idx[i]: chosen_idx[i] + seq_len]][keys]
+            else:
+                temp_seq = self.norm_data.loc[self.indices[chosen_idx[i]*seq_len: (chosen_idx[i] + 1)*seq_len]][keys]
+            batch_data.append(temp_seq.values.tolist())
+        return batch_data
+
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='3', state_dims=2, reward='TP', look_back=10, delayed_reward=True)
+    env = FinancialEnv(state='3', state_dims=1, reward='earning_rate', look_back=1, delayed_reward=False)
     ob = env.reset()
     rwd = 0
+    print(env.get_batch_data(10))
     # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
     # print(ob.reshape(1, -1))
-    while True:
-        import random
-        ac = random.randint(0, 2)
-        # ac = 2
+    # while True:
+    #     import random
+    #     ac = random.randint(0, 2)
+    #     ac = 2
         # print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
-        ob, r, done, info = env.step(ac)
-        print(r)
-
-        rwd += r
-        if done:
-            print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd)
-            rwd = 0
-            env.reset()
-        # if env.cur_pos == 290:
-        #     break
+        # ob, r, done, info = env.step(ac)
         # print(r)
+        #
+        # rwd += r
+        # if done:
+        #     print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
+        #     rwd = 0
+            # env.reset()
