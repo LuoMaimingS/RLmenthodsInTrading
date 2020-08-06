@@ -145,8 +145,13 @@ class FinancialEnv(gym.Env):
         # Done check. 当前是否为该日的结束
         if self.cur_pos >= (len(self.indices) - 2):
             done = 1
-        elif by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
-            done = 1
+        else:
+            if self.security.startswith('virtual'):
+                if self.cur_pos % 240 == 239:
+                    done = 1
+            else:
+                if by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
+                    done = 1
 
         # 仓位未变动，只需要刷新资产和收益
         if action == self.position:
@@ -398,8 +403,12 @@ class FinancialEnv(gym.Env):
                 self.cur_pos = 0
                 break
             self.cur_pos += 1
-            if self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
-                break
+            if self.security.startswith('virtual'):
+                if self.cur_pos % 240 == 239:
+                    break
+            else:
+                if self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
+                    break
         return self.get_ob()
 
     def update_assets(self):
@@ -501,22 +510,22 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(security='virtual_stock', state='3', state_dims=1, reward='earning_rate', look_back=1, delayed_reward=False)
+    env = FinancialEnv(security='virtual_data', state='0', state_dims=1, reward='TP', look_back=3, delayed_reward=False)
     ob = env.reset()
     rwd = 0
-    print(env.get_batch_data(10))
+    # print(env.get_batch_data(10))
     # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
-    # print(ob.reshape(1, -1))
-    # while True:
-    #     import random
-    #     ac = random.randint(0, 2)
-    #     ac = 2
-        # print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
-        # ob, r, done, info = env.step(ac)
-        # print(r)
-        #
-        # rwd += r
-        # if done:
-        #     print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
-        #     rwd = 0
-            # env.reset()
+    print(ob.reshape(1, -1))
+    while True:
+        import random
+        ac = random.randint(0, 2)
+        # ac = 2
+        print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
+        ob, r, done, info = env.step(ac)
+        print(r)
+
+        rwd += r
+        if done:
+            # print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
+            rwd = 0
+            env.reset()
