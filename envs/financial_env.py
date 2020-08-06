@@ -38,11 +38,12 @@ REWARDS = ['TP', 'earning_rate', 'log_return', 'running_SR']
 """
 IF9999.CCFX: 在2016年1月1日前（不包括）每天有 270 个 bar，之后每天有 240 个 bar
 """
-CHECKED_SECURITIES = ['IF9999.CCFX']
+CHECKED_SECURITIES = ['IF9999.CCFX', 'virtual_data']
 
 
 class FinancialEnv(gym.Env):
     def __init__(self,
+                 security='IF9999.CCFX',
                  state='1',
                  state_dims=1,
                  reward='TP',
@@ -54,8 +55,7 @@ class FinancialEnv(gym.Env):
                  short_term=None,
                  long_term=None,
                  shuffle_reset=False):
-        self.security = 'IF9999.CCFX'
-
+        self.security = security
         self.start_date = datetime.datetime.strptime('2013-08-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2015-02-01', '%Y-%m-%d')
         """
@@ -416,7 +416,7 @@ class FinancialEnv(gym.Env):
 
     def _load_data(self):
         load_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-        if len(self.security) > 6:
+        if len(self.security) > 6 and self.security[:7] != 'virtual':
             if not os.path.exists(os.path.join(load_path, self.security[:6] + '.h5')):
                 print('Version Updated, Needing ReWrite Data.')
                 data_rewrite(self.security)
@@ -428,17 +428,20 @@ class FinancialEnv(gym.Env):
 
         print("读取 {} 数据中......".format(self.security), end='  ')
         raw_data = pd.read_hdf(load_file)
-        self.data = raw_data.loc[self.start_date:self.end_date]
+        if self.security.startswith('virtual'):
+            self.data = raw_data
+            self.prices = list(raw_data['close'])
+        else:
+            self.data = raw_data.loc[self.start_date:self.end_date]
+            self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
         self.norm_data = MinMaxScaler(self.data)
-
-        self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
 
         self.indices = self.data.index.tolist()
         self.total_minutes = len(self.indices)
         self.total_days = int(self.total_minutes / 270)
         self.base_price = self.data.loc[self.indices[0]]['open']
 
-        ok = 1 if self.security in CHECKED_SECURITIES else self.find_incomplete_day()
+        ok = 1 if self.security in CHECKED_SECURITIES or self.security.startswith('virtual') else self.find_incomplete_day()
         if not ok:
             raise ValueError('原数据中有缺失数据，请确认！')
         print('共 {} 天， {} 分钟.'.format(self.total_days, self.total_minutes))
@@ -448,6 +451,8 @@ class FinancialEnv(gym.Env):
         if self.security in ['IF9999', 'IF9999.CCFX']:
             self.buy_rate = self.sell_rate = 0.000023
             # self.buy_rate = self.sell_rate = 0.000345
+        elif self.security.startswith('virtual'):
+            self.buy_rate = self.sell_rate = 0.000023
         else:
             raise NotImplementedError
 
@@ -496,7 +501,7 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='3', state_dims=1, reward='earning_rate', look_back=1, delayed_reward=False)
+    env = FinancialEnv(security='virtual_stock', state='3', state_dims=1, reward='earning_rate', look_back=1, delayed_reward=False)
     ob = env.reset()
     rwd = 0
     print(env.get_batch_data(10))
