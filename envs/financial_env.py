@@ -404,7 +404,7 @@ class FinancialEnv(gym.Env):
                 break
             self.cur_pos += 1
             if self.security.startswith('virtual'):
-                if self.cur_pos % 240 == 239:
+                if self.cur_pos % 240 == 0:
                     break
             else:
                 if self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
@@ -510,7 +510,7 @@ class FinancialEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = FinancialEnv(security='virtual_data', state='0', state_dims=1, reward='TP', look_back=3, delayed_reward=False)
+    env = FinancialEnv(security='virtual_data', state='3', state_dims=1, reward='TP', look_back=3, delayed_reward=False)
     ob = env.reset()
     rwd = 0
     # print(env.get_batch_data(10))
@@ -520,12 +520,12 @@ if __name__ == '__main__':
         import random
         ac = random.randint(0, 2)
         # ac = 2
-        print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
+        # print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
         ob, r, done, info = env.step(ac)
-        print(r)
+        # print(r)
 
         rwd += r
         if done:
-            # print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
+            print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
             rwd = 0
             env.reset()
