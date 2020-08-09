@@ -1,14 +1,12 @@
 import gym
 from gym.spaces import Discrete, Box
 from gym.utils import seeding
-import numpy as np
 import datetime
-import os
 import enum
-import pandas as pd
 import random
 
 from envs.data_rewrite import *
+from envs.env_utils import *
 
 
 class Actions(enum.Enum):
@@ -40,11 +38,12 @@ REWARDS = ['TP', 'earning_rate', 'log_return', 'running_SR']
 """
 IF9999.CCFX: 在2016年1月1日前（不包括）每天有 270 个 bar，之后每天有 240 个 bar
 """
-CHECKED_SECURITIES = ['IF9999.CCFX']
+CHECKED_SECURITIES = ['IF9999.CCFX', 'virtual_data']
 
 
 class FinancialEnv(gym.Env):
     def __init__(self,
+                 security='IF9999.CCFX',
                  state='1',
                  state_dims=1,
                  reward='TP',
@@ -56,14 +55,14 @@ class FinancialEnv(gym.Env):
                  short_term=None,
                  long_term=None,
                  shuffle_reset=False):
-        self.security = 'IF9999.CCFX'
-
-        self.start_date = datetime.datetime.strptime('2015-01-01', '%Y-%m-%d')
+        self.security = security
+        """
+        self.start_date = datetime.datetime.strptime('2017-01-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2018-12-31', '%Y-%m-%d')
+        """
+        self.start_date = datetime.datetime.strptime('2019-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
-        """
-        self.start_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2020-05-31', '%Y-%m-%d')
-        """
+        
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
         self.state_dims = state_dims
@@ -127,6 +126,7 @@ class FinancialEnv(gym.Env):
         self.A_n = 0.
         self.B_n = 0.
         self.prev_running_sr = 0.
+        # self.log_info()
 
         return self.get_ob()
 
@@ -146,8 +146,13 @@ class FinancialEnv(gym.Env):
         # Done check. 当前是否为该日的结束
         if self.cur_pos >= (len(self.indices) - 2):
             done = 1
-        elif by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
-            done = 1
+        else:
+            if self.security.startswith('virtual'):
+                if self.cur_pos % 240 == 239:
+                    done = 1
+            else:
+                if by_day and self.indices[self.cur_pos].date() != self.indices[self.cur_pos + 1].date():
+                    done = 1
 
         # 仓位未变动，只需要刷新资产和收益
         if action == self.position:
@@ -316,7 +321,7 @@ class FinancialEnv(gym.Env):
             tp_reward = cur_assets - self.assets
             return tp_reward
         elif self.reward_type == 'earning_rate':
-            er = (cur_assets - self.assets) / self.assets * 100
+            er = (cur_assets - self.assets) / self.capital_base * 100
             return er
         elif self.reward_type == 'log_return':
             origin_return = (cur_assets - self.assets) / self.assets
@@ -399,8 +404,12 @@ class FinancialEnv(gym.Env):
                 self.cur_pos = 0
                 break
             self.cur_pos += 1
-            if self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
-                break
+            if self.security.startswith('virtual'):
+                if self.cur_pos % 240 == 0:
+                    break
+            else:
+                if self.indices[self.cur_pos - 1].date() != self.indices[self.cur_pos].date():
+                    break
         return self.get_ob()
 
     def update_assets(self):
@@ -417,7 +426,7 @@ class FinancialEnv(gym.Env):
 
     def _load_data(self):
         load_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-        if len(self.security) > 6:
+        if len(self.security) > 6 and self.security[:7] != 'virtual':
             if not os.path.exists(os.path.join(load_path, self.security[:6] + '.h5')):
                 print('Version Updated, Needing ReWrite Data.')
                 data_rewrite(self.security)
@@ -429,16 +438,20 @@ class FinancialEnv(gym.Env):
 
         print("读取 {} 数据中......".format(self.security), end='  ')
         raw_data = pd.read_hdf(load_file)
-        self.data = raw_data.loc[self.start_date:self.end_date]
-
-        self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
+        if self.security.startswith('virtual'):
+            self.data = raw_data
+            self.prices = list(raw_data['close'])
+        else:
+            self.data = raw_data.loc[self.start_date:self.end_date]
+            self.prices = list(raw_data.loc[self.start_date:self.end_date]['close'])
+        self.norm_data = MinMaxScaler(self.data)
 
         self.indices = self.data.index.tolist()
         self.total_minutes = len(self.indices)
         self.total_days = int(self.total_minutes / 270)
         self.base_price = self.data.loc[self.indices[0]]['open']
 
-        ok = 1 if self.security in CHECKED_SECURITIES else self.find_incomplete_day()
+        ok = 1 if self.security in CHECKED_SECURITIES or self.security.startswith('virtual') else self.find_incomplete_day()
         if not ok:
             raise ValueError('原数据中有缺失数据，请确认！')
         print('共 {} 天， {} 分钟.'.format(self.total_days, self.total_minutes))
@@ -448,6 +461,8 @@ class FinancialEnv(gym.Env):
         if self.security in ['IF9999', 'IF9999.CCFX']:
             self.buy_rate = self.sell_rate = 0.000023
             # self.buy_rate = self.sell_rate = 0.000345
+        elif self.security.startswith('virtual'):
+            self.buy_rate = self.sell_rate = 0.000023
         else:
             raise NotImplementedError
 
@@ -480,26 +495,38 @@ class FinancialEnv(gym.Env):
         print('{} Checked, *** PLEASE ADD IT TO CHECKED_SECURITIES ***'.format(self.security))
         return True
 
+    def get_batch_data(self, batch_size, seq_len=30, overlap=True):
+        batch_data = list()
+        random_idx = np.random.permutation(self.total_minutes) if overlap else \
+            np.random.permutation(self.total_minutes) // seq_len
+        chosen_idx = random_idx[:batch_size]
+        keys = ['open', 'high', 'low', 'close', 'volume']
+        for i in range(batch_size):
+            if overlap:
+                temp_seq = self.norm_data.loc[self.indices[chosen_idx[i]: chosen_idx[i] + seq_len]][keys]
+            else:
+                temp_seq = self.norm_data.loc[self.indices[chosen_idx[i]*seq_len: (chosen_idx[i] + 1)*seq_len]][keys]
+            batch_data.append(temp_seq.values.tolist())
+        return batch_data
+
 
 if __name__ == '__main__':
-    env = FinancialEnv(state='3', state_dims=2, reward='TP', look_back=10, delayed_reward=True)
+    env = FinancialEnv(security='virtual_data', state='3', state_dims=1, reward='TP', look_back=3, delayed_reward=False)
     ob = env.reset()
     rwd = 0
+    # print(env.get_batch_data(10))
     # print(env.cur_pos, env.indices[env.cur_pos], env.prices[env.cur_pos])
-    # print(ob.reshape(1, -1))
+    print(ob.reshape(1, -1))
     while True:
         import random
         ac = random.randint(0, 2)
         # ac = 2
         # print(ob, env.indices[env.cur_pos], env.prices[env.cur_pos])
         ob, r, done, info = env.step(ac)
-        print(r)
+        # print(r)
 
         rwd += r
         if done:
-            print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd)
+            print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
             rwd = 0
             env.reset()
-        # if env.cur_pos == 290:
-        #     break
-        # print(r)

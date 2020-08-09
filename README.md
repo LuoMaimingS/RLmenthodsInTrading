@@ -1,7 +1,19 @@
 # RLmenthodsInTrading
 该项目基于不同的强化学习算法，定义了数种State和Reward，以研究在中国金融市场中哪些组合可以获得比较高的收益。
 
-## Release 2.0
+## Release 2.2
+使用虚拟数据进行训练。
+* 首先，将生成的虚拟数据（3维，（轨迹数，轨迹长度，轨迹内特征ochlva）），通过
+```angular2html
+from envs.data_rewrite import *
+
+# security指保存的文件名，要以'virtual'开头
+trans_generate_matrix_to_real_data(virtual_data, security='virtual_data')
+```
+进行数据转换，然后在环境中将security设置成这里保存的名称，就可以直接调用之前的所有功能，完全一样。
+* 轨迹长度最好能整除240，这样有比较合理的解释。
+
+## Release 2.1
 env中加入delayed_reward参数，为True只有在交易实现时才会有reward，是稀疏的reward实现；为False则同原来一样，不影响。
 
 ## Release 2.0
