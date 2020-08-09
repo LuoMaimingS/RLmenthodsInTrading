@@ -133,3 +133,4 @@ data/
 *.h5
 env_test/
 .vscode
+checkpoint*
