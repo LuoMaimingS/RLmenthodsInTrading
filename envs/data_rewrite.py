@@ -116,7 +116,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
     """
     rows = len(matrix) * len(matrix[0])
     store_indices = []
-    rewrite_data = np.zeros((rows, 42))
+    rewrite_data = np.zeros((rows, 21))
 
     last_12_close = []
     last_12_obv = []
@@ -125,6 +125,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
     cur_idx = 0
     rewrite_idx = 0
     intra_day_count = 0
+    idx = [1, 2, 3, 9, 12]
     while cur_idx < len(matrix):
         if cur_idx % 10000 == 0:
             print("\r {} / {}".format(cur_idx, rows), end=' ')
@@ -155,7 +156,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
 
             offset = 6
             # ma_t
-            for i in range(12):
+            for i in idx:
                 sum_p = p_close
                 for j in range(1, i + 2):
                     if len(last_12_close) >= j:
@@ -166,7 +167,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
                 offset += 1
 
             # momentum_t
-            for i in range(12):
+            for i in idx:
                 if len(last_12_close) >= (i + 1):
                     momentum_i = p_close - last_12_close[-i - 1]
                 else:
@@ -175,7 +176,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
                 offset += 1
 
             # obv_t
-            for i in range(12):
+            for i in idx:
                 sum_obv = cur_obv
                 for j in range(1, i + 2):
                     if len(last_12_obv) >= j:
@@ -185,7 +186,7 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
                 rewrite_data[rewrite_idx, offset] = round(sum_obv / (i + 2), 2)
                 offset += 1
 
-            assert offset == 42
+            # assert offset == 42
             store_indices.append(rewrite_idx)
             rewrite_idx += 1
 
@@ -193,12 +194,18 @@ def trans_generate_matrix_to_real_data(matrix, security='virtual_data'):
     print(rewrite_data.shape)
 
     store_columns = ['open', 'close', 'high', 'low', 'volume', 'money']
-    for i in range(1, 13):
+    for i in idx:
         store_columns += ['ma_%d' % i]
-    for i in range(1, 13):
+    for i in idx:
         store_columns += ['mom_%d' % i]
-    for i in range(1, 13):
+    for i in idx:
         store_columns += ['obv_%d' % i]
+    # for i in range(1, 13):
+    #     store_columns += ['ma_%d' % i]
+    # for i in range(1, 13):
+    #     store_columns += ['mom_%d' % i]
+    # for i in range(1, 13):
+    #     store_columns += ['obv_%d' % i]
 
     df = pd.DataFrame(rewrite_data, index=store_indices, columns=store_columns)
     write_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', security + '.h5')
