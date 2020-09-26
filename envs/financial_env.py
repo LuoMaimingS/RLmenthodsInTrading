@@ -33,7 +33,7 @@ earning rate: Total earning rate
 log_return: Log earning rate
 running_SR: running sharp ratio
 """
-REWARDS = ['TP', 'earning_rate', 'log_return', 'running_SR']
+REWARDS = ['TP', 'earning_rate', 'log_return', 'running_SR', 'sterling']
 
 """
 IF9999.CCFX: 在2016年1月1日前（不包括）每天有 270 个 bar，之后每天有 240 个 bar
@@ -57,11 +57,11 @@ class FinancialEnv(gym.Env):
                  shuffle_reset=False):
         self.security = security
         
-        self.start_date = datetime.datetime.strptime('2017-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2018-12-31', '%Y-%m-%d')
+        self.start_date = datetime.datetime.strptime('2016-01-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2019-06-30', '%Y-%m-%d')
         """
-        self.start_date = datetime.datetime.strptime('2019-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        self.start_date = datetime.datetime.strptime('2019-09-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2020-06-30', '%Y-%m-%d')
         """
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
@@ -106,8 +106,8 @@ class FinancialEnv(gym.Env):
         self.shuffle_reset = shuffle_reset
 
     def reload_data(self):
-        self.start_date = datetime.datetime.strptime('2019-01-01', '%Y-%m-%d')
-        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        self.start_date = datetime.datetime.strptime('2019-07-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2019-08-31', '%Y-%m-%d')
         self._load_data()
 
     def reset(self, by_day=True):
@@ -333,6 +333,7 @@ class FinancialEnv(gym.Env):
             log_return = np.log(1 + origin_return)
             return log_return
         elif self.reward_type == 'running_SR':
+            """
             n = self.trading_ticks
             r_n = (cur_assets - self.assets) / self.assets
             self.A_n = (1 / n) * r_n + (n - 1) / n * self.A_n
@@ -344,7 +345,33 @@ class FinancialEnv(gym.Env):
                 sr_n = self.A_n / (k_n * np.sqrt(self.B_n - np.square(self.A_n)))
             delta_sr = sr_n - self.prev_running_sr
             self.prev_running_sr = sr_n
-            return delta_sr
+            return sr_n
+            """
+            eta = 0.9
+            r_n = (cur_assets - self.assets) / self.assets
+            delta_A_n = r_n - self.A_n
+            delta_B_n = r_n ** 2 - self.B_n
+            if self.A_n == 0 or np.abs(self.B_n - self.A_n ** 2) < 1e-6:
+                sr_n = 0
+            else:
+                sr_n = (self.B_n * delta_A_n - 0.5 * self.A_n * delta_B_n) / np.power(self.B_n - self.A_n ** 2, 1.5)
+            self.A_n = self.A_n + eta * delta_A_n
+            self.B_n = self.B_n + eta * delta_B_n
+            return sr_n
+        elif self.reward_type == 'sterling':
+            eta = 0.9
+            r_n = (cur_assets - self.assets) / self.assets
+            delta_A_n = r_n - self.A_n
+            delta_B_n = np.minimum(r_n, 0) ** 2 - self.B_n
+            if self.B_n < 1e-6:
+                sr_n = 0
+            elif r_n > 0:
+                sr_n = (r_n - 0.5 * self.A_n) / np.sqrt(self.B_n)
+            else:
+                sr_n = (self.B_n * (r_n - 0.5 * self.A_n) - 0.5 * self.A_n * r_n ** 2) / np.power(self.B_n, 1.5)
+            self.A_n = self.A_n + eta * delta_A_n
+            self.B_n = self.B_n + eta * delta_B_n
+            return sr_n
         else:
             raise NotImplementedError
 
@@ -535,3 +562,4 @@ if __name__ == '__main__':
             print(env.assets, env.cur_pos, env.indices[env.cur_pos], rwd, env.prices[env.cur_pos])
             rwd = 0
             env.reset()
+
