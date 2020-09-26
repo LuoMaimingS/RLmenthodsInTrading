@@ -56,13 +56,13 @@ class FinancialEnv(gym.Env):
                  long_term=None,
                  shuffle_reset=False):
         self.security = security
-        """
+        
         self.start_date = datetime.datetime.strptime('2017-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2018-12-31', '%Y-%m-%d')
         """
         self.start_date = datetime.datetime.strptime('2019-01-01', '%Y-%m-%d')
         self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
-        
+        """
         assert state in STATES, 'Invalid State Type, Should be one of {}'.format(STATES)
         self.state_type = state
         self.state_dims = state_dims
@@ -104,6 +104,11 @@ class FinancialEnv(gym.Env):
         self.delayed_reward = delayed_reward
         self.cost_price = 0.
         self.shuffle_reset = shuffle_reset
+
+    def reload_data(self):
+        self.start_date = datetime.datetime.strptime('2019-01-01', '%Y-%m-%d')
+        self.end_date = datetime.datetime.strptime('2019-12-31', '%Y-%m-%d')
+        self._load_data()
 
     def reset(self, by_day=True):
         """
@@ -448,7 +453,7 @@ class FinancialEnv(gym.Env):
 
         self.indices = self.data.index.tolist()
         self.total_minutes = len(self.indices)
-        self.total_days = int(self.total_minutes / 270)
+        self.total_days = int(self.total_minutes / 240)
         self.base_price = self.data.loc[self.indices[0]]['open']
 
         ok = 1 if self.security in CHECKED_SECURITIES or self.security.startswith('virtual') else self.find_incomplete_day()
